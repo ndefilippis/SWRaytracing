@@ -1,28 +1,22 @@
-load C:/Users/ndefi/Downloads/ray_trace_sw/wavevort_231058_restart_frame100
-% Contains state variable S(:,:,:) with [u,v,eta]=S(:,:,1:3)
-% Use method from wavevortdecomp.m to extract geostrophic mode
-% velocities ug, vg, and compute gradients spectrally
-addpath C:/Users/ndefi/Downloads/rsw/
-addpath C:/Users/ndefi/Downloads/ray_trace_sw/
-
 image_path = "images/";
+write_file = false;
+
+f = 3
+gH = 1
+Cg = sqrt(gH);
 
 L = 2*pi;
 nx = 512;
+
 X = linspace(-L/2, L/2, nx);
 [XX, YY] = meshgrid(X);
-% S(:,:,1) = 0;
-% S(:,:,2) = 0;
-% S(:,:,3) = (cos(XX).^2 + cos(YY).^2);
 
-streamfunction = @(x, y, t) (x.^2 + y.^2);
+streamfunction = @(x, y, t) (0.05*(x.^2 + y.^2));
+scheme = DifferenceScheme(streamfunction);
 
-%scheme = DifferenceScheme(streamfunction);
-scheme = SpectralScheme(Cg, f, L, nx, S);
+%load C:/Users/ndefi/Downloads/ray_trace_sw/wavevort_231058_restart_frame100
+%scheme = SpectralScheme(Cg, f, L, nx, S);
 
-fmt = "yyyy-MM-dd HH_mm_ss";
-filename = image_path + "QG_" + string(datetime("now"), fmt) + ".gif";
-write_file = false;
 Nparticles = 30;
 
 x = zeros(Nparticles, 2);
@@ -36,11 +30,44 @@ end
 U = scheme.U([XX, YY]);
 speed = vecnorm(U, 2, 2);
 U0 = max(speed(:));
-C0 = Cg;
+C0 = sqrt(gH);
 gH = Cg^2;
-Fr = U0/C0;
+Fr = U0/C0
 dx = L/nx;
 dt = 0.3*dx/max(C0, U0);
+
+Tend = 4/(f*Fr^2);
+Nsteps = floor(Tend/dt)
+% figure
+% subplot(1,1,1);
+% omega_s = spectrum(x, k, t);
+% histogram(omega_s);
+% figure
+Omega_0 = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
+error = zeros(Nsteps + 1, Nparticles);
+
+t_hist = zeros(Nsteps + 1, 1);
+x_hist = zeros(Nsteps + 1, Nparticles, 2);
+k_hist = zeros(Nsteps + 1, Nparticles, 2);
+
+t_hist(1) = 0;
+x_hist(1,:,:) = x;
+k_hist(1,:,:) = k;
+
+
+for i = 1:Nsteps
+   x = x + rk4(dt, k, x, t, @(k, x, t) (scheme.U(x, t) + grad_omega(k, f, gH)));
+   k = k + rk4(dt, k, x, t, @(k, x, t) -scheme.grad_U_times_k(x, k, t));
+   t = t + dt;
+   t_hist(i+1) = t;
+   x_hist(i+1,:,:) = x;
+   k_hist(i+1,:,:) = k;
+   Omega_abs = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
+   error(i+1,:) = (Omega_abs - Omega_0) ./ Omega_0;
+end
+
+fmt = "yyyy-MM-dd HH_mm_ss";
+filename = image_path + "QG_" + string(datetime("now"), fmt) + ".gif";
 
 figure(1);
 subplot(2, 1, 1);
@@ -65,6 +92,10 @@ axis image
 xlim([-50, 50]);
 ylim([-50, 50]);
 
+subplot(2,2,4);
+freq = sort(omega(squeeze(k_hist(1,:,:)), f, gH));
+W = plot(freq, energy(freq));
+
 if(write_file)
     frame = getframe(1);
     im = frame2im(frame);
@@ -72,28 +103,12 @@ if(write_file)
     imwrite(imind,cm,filename,'gif','DelayTime',0.05, 'Loopcount',inf);
 end
 
-Tend = 1/(f*Fr^2);
-Nsteps = floor(Tend/dt);
-% figure
-% subplot(1,1,1);
-% omega_s = spectrum(x, k, t);
-% histogram(omega_s);
-% figure
-Omega_0 = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
-error = zeros(Nsteps + 1, Nparticles);
-t_hist = zeros(Nsteps + 1, 1);
-t_hist(1) = 0;
-for i = 1:Nsteps
-   x = x + rk4(dt, k, x, t, @(k, x, t) (scheme.U(x, t) + grad_omega(k, f, gH)));
-   k = k + rk4(dt, k, x, t, @(k, x, t) -scheme.grad_U_times_k(x, k, t));
-   t = t + dt;
-   t_hist(i+1) = t;
-   Omega_abs = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
-   error(i+1,:) = (Omega_abs - Omega_0) ./ Omega_0;
-   if mod(i, 40) == 1
-       set(p, {'XData','YData'},{mod(x(:,1) + L/2, L) - L/2, mod(x(:,2) + L/2, L) - L/2});
-       set(q, {'XData', 'YData', 'UData', 'VData'}, {mod(x(:,1) + L/2, L) - L/2, mod(x(:,2) + L/2, L) - L/2, k(:,1), k(:,2)});
-       set(KK, {'XData','YData'}, {k(:,1), k(:,2)});
+for i=1:40:Nsteps
+       set(p, {'XData','YData'},{mod(x_hist(i,:,1) + L/2, L) - L/2, mod(x_hist(i,:,2) + L/2, L) - L/2});
+       set(q, {'XData', 'YData', 'UData', 'VData'}, {mod(x_hist(i,:,1) + L/2, L) - L/2, mod(x_hist(i,:,2) + L/2, L) - L/2, k_hist(i,:,1), k_hist(i,:,2)});
+       set(KK, {'XData','YData'}, {k_hist(i,:,1), k_hist(i,:,2)});
+       freq = sort(omega(squeeze(k_hist(i,:,:)), f, gH));
+       set(W, {'XData', 'YData'}, {freq, energy(freq)});
        
        %subplot(2, 2, 2);
        %subplot(1, 2, 2);
@@ -112,12 +127,22 @@ for i = 1:Nsteps
            imwrite(imind,cm,filename,'gif','DelayTime',0.05,'WriteMode','append');
        end
        pause(1/60);
-   end
 end
+
 figure()
+title("Error in absolute frequency");
 plot(t_hist * (f*Fr^2), error);
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
+
+figure()
+title("Accumulation plot")
+plot(k_hist(:,:,1), k_hist(:,:,2))
+hold on
+plot(k_hist(1,:,1), k_hist(1,:,2), 'k', 'LineWidth', 2.5)
+hold off
+xlabel("k_1");
+ylabel("k_2");
 
 
 function omega_s=spectrum(x, k, t)
