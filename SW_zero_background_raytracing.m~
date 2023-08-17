@@ -17,7 +17,7 @@ X = linspace(-L/2, L/2, nx);
 load ./ray_trace_sw/wavevort_231058_restart_frame100
 scheme = SpectralScheme(Cg, f, L, nx, S);
 
-Nparticles = 30;
+Nparticles = 3;
 
 x = zeros(Nparticles, 2);
 k = zeros(Nparticles, 2);
@@ -50,8 +50,6 @@ solver_error = zeros(Nsteps + 1, Nparticles);
 t_hist = zeros(Nsteps + 1, 1);
 x_hist = zeros(Nsteps + 1, Nparticles, 2);
 k_hist = zeros(Nsteps + 1, Nparticles, 2);
-solver_x = zeros(Nsteps + 1, Nparticles, 2);
-solver_k = zeros(Nsteps + 1, Nparticles, 2);
 
 t_hist(1) = 0;
 x_hist(1,:,:) = x;
@@ -134,8 +132,6 @@ if(write_file)
     imwrite(imind,cm,filename,'gif','DelayTime',0.05, 'Loopcount',inf);
 end
 
-anim = 0;
-if(anim)
 for i=1:40:Nsteps
        set(p, {'XData','YData'},{mod(x_hist(i,:,1) + L/2, L) - L/2, mod(x_hist(i,:,2) + L/2, L) - L/2});
        set(p_solver, {'XData', 'YData'},{mod(solver_x(i,:,1) + L/2, L) - L/2, mod(solver_x(i,:,2) + L/2, L) - L/2});
@@ -164,17 +160,15 @@ for i=1:40:Nsteps
        end
        pause(1/60);
 end
-end
 
-% Plot errors in absolute magnitude
 figure()
-%rk4_error_plot = plot(t_hist * (f*Fr^2), error, "k");
+rk4_error_plot = plot(t_hist * (f*Fr^2), error, "k");
 title("Error in absolute frequency");
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
 hold on
-solver_error_plot = plot(t_hist * (f*Fr^2), solver_error);
-%legend([rk4_error_plot(1), solver_error_plot(1)], "RK4 error", "MATLAB solver error");
+solver_error_plot = plot(t_hist * (f*Fr^2), solver_error, 'k--');
+legend([rk4_error_plot(1), solver_error_plot(1)], "RK4 error", "od");
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
 

@@ -4,8 +4,8 @@ classdef SpectralScheme < RaytracingScheme
     end
     methods
         function obj = SpectralScheme(Cg, f, L, nx, S)
-            addpath C:/Users/ndefi/Downloads/rsw/
-            addpath C:/Users/ndefi/Downloads/ray_trace_sw/
+            addpath ./rsw/
+            addpath ./ray_trace_sw/
             
             obj.L = L;
             
