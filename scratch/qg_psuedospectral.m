@@ -27,25 +27,25 @@ packet_steps_per_simulation_step = 10;
 % Simulation parameters
 beta = 0;
 f = 3;
-Cg = 0.1;
+Cg = 1;
 K_d2 = f/Cg;
 
-a_g = 0.1;
+a_g = 0.01;
 q = initial_q(X, Y, a_g, K_d2);
 qk = g2k(q);
 
 % Find CFL condition based on inital PV
 % Also compute Froude number from inital flow
 flow = grid_U(qk, K_d2, K2, kx_, ky_);
-speed = flow.u.^2 + flow.v.^2;
-U0 = max(U(:));
+speed2 = flow.u.^2 + flow.v.^2;
+U0 = sqrt(max(speed2(:)));
 Fr = U0/Cg;
 fprintf("Froude Number: %f\n", Fr);
 
-dt = 0.25*h/U;
+dt = 0.1*h/U0;
 packet_dt = dt/packet_steps_per_simulation_step;
-T = 5/(f*Fr^2);
-Nsteps = ceil(T/dt);
+T = 1/(f*Fr^2);
+Nsteps = ceil(T/dt)
 steps_per_save = 20; % Has to be bigger than 3 or it wont save the initial AB steps
 Npacket_steps = Nsteps * packet_steps_per_simulation_step;
 packet_steps_per_save = 10;%steps_per_save * packet_steps_per_simulation_step;
@@ -89,7 +89,8 @@ for step=4:Nsteps
        background_flow2 = grid_U(qk, K_d2, K2, kx_, ky_);
        ray_ode = generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, dt, h);
        y0 = ode_xk2y(Npackets, packet_x, packet_k);
-       [t_steps, solver_y] = ode15s(ray_ode, [0, dt], y0);
+       opts = odeset('Jpattern', sparsity(Npackets));
+       [t_steps, solver_y] = ode15s(ray_ode, [0, dt], y0, opts);
        [packet_x, packet_k] = ode_y2xk(Npackets, solver_y(end,:)');
    end
    
@@ -133,7 +134,7 @@ function q=initial_q(X, Y, a_g, K_d2)
     total_eta = 0;
     for k=-13:13
         for l=-13:13
-            if 10^2 < k^2 + l^2 <= 13^2
+            if 5^2 < k^2 + l^2 <= 8^2
                 % Keep track of total eta to normalize after the face
                 eta = real(exp(1i*(k*X + l*Y + phase(k+16, l+16))));
                 total_eta = total_eta + eta;
@@ -237,6 +238,18 @@ function y = ode_xk2y(Npackets, x, k)
     y(3*Npackets + 1:4*Npackets) = k(:, 2);
 end
 
+function S = sparsity(Npackets)
+    S = zeros(4*Npackets);
+    for i=1:Npackets
+       for field=0:3
+           for field2=0:3
+            S(i + Npackets*field, i + Npackets*field2) = 1;
+            S(i + Npackets*field2, i + field*Npackets) = 1;
+           end
+       end
+    end
+end
+
 function rayode=generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, tmax, h)
     function dydt=odefun(t, y)
        [x, k] = ode_y2xk(Npackets, y);
@@ -261,7 +274,7 @@ function result=update(qk, K2, K_d2, beta, kx_, ky_)
    qx = k2g(qkx);
    qy = k2g(qky);
    
-   J = -psix.*qy + psiy .* qx;
+   J = psix.*qy - psiy .* qx;
    %nu = 10;
    %hyperdiffusion = -nu*(1i*kx_).^2.*(1i*ky_).^2.*((1i*kx_).^6 + (1i*ky_).^6);
    result = g2k(J) - beta*psikx;
