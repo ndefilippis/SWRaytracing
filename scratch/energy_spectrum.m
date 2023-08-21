@@ -8,7 +8,7 @@ for i=1:frame
     KEk = K2.*abs(psik).^2;
     KE = zeros(1,kmax);
     for j=1:kmax
-       mask = ((j-1)^2 <= K2) .* (K2 < j^2);
+       mask = ((j-0.5)^2 <= K2) .* (K2 < (j+0.5)^2);
        KE(j) = sum(mask(:).*KEk(:)); 
     end
     loglog(1:kmax, KE);

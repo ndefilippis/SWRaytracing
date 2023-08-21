@@ -1,8 +1,8 @@
-addpath /home/nad9961/Documents/Projects/SWRaytracing/rsw/
+addpath ../rsw/
 
-% Set up QG pseudospectral domain
+% Set up domain
 L = 2*pi;
-nx = 256;
+nx = 128;
 h = L/nx;
 x = linspace(-L/2, L/2, nx);
 y = linspace(-L/2, L/2, nx);
@@ -12,25 +12,25 @@ kmax = nx/2-1;
 [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
 K2 = kx_.^2 + ky_.^2;
 
-% Set up wave packets
-Npackets = 30;
-
-packet_x = zeros(Npackets, 2);
-packet_k = zeros(Npackets, 2);
-t = 0;
-for i=1:Npackets
-   packet_k(i, :) = 1.1 * [cos(2*pi*i/Npackets), sin(2*pi*i/Npackets)]; 
-   packet_x(i, :) = L*(rand(1, 2)) - L/2;
-end
-packet_steps_per_simulation_step = 10;
-
 % Simulation parameters
 beta = 0;
 f = 3;
 Cg = 1;
 K_d2 = f/Cg;
 
-a_g = 0.01;
+% Set up wave packets
+Npackets = 30;
+
+packet_x = zeros(Npackets, 2);
+packet_k = zeros(Npackets, 2);
+
+for i=1:Npackets
+   packet_k(i, :) = 1.1 * f * [cos(2*pi*i/Npackets), sin(2*pi*i/Npackets)]; 
+   packet_x(i, :) = L*(rand(1, 2)) - L/2;
+end
+packet_steps_per_simulation_step = 10;
+
+a_g = 0.1;
 q = initial_q(X, Y, a_g, K_d2);
 qk = g2k(q);
 
@@ -42,17 +42,23 @@ U0 = sqrt(max(speed2(:)));
 Fr = U0/Cg;
 fprintf("Froude Number: %f\n", Fr);
 
-dt = 0.1*h/U0;
+dt = 0.3*h/U0;
 packet_dt = dt/packet_steps_per_simulation_step;
-T = 1/(f*Fr^2);
-Nsteps = ceil(T/dt)
+T = 1000/f;
+Nsteps = ceil(T/dt);
 steps_per_save = 20; % Has to be bigger than 3 or it wont save the initial AB steps
-Npacket_steps = Nsteps * packet_steps_per_simulation_step;
-packet_steps_per_save = 10;%steps_per_save * packet_steps_per_simulation_step;
+
+% Npacket_steps = Nsteps * packet_steps_per_simulation_step;
+packet_steps_per_save = 1;
+packet_delay = 0.75*T;
+packet_step_start = ceil(packet_delay / T * Nsteps);
+packet_frame_start = ceil(packet_delay / T * Nsteps / steps_per_save);
 
 q_save = zeros(nx, nx, floor(Nsteps / steps_per_save));
-x_save = zeros(Npackets, 2, floor(Nsteps / steps_per_save));
-k_save = zeros(Npackets, 2, floor(Nsteps / steps_per_save));
+x_save = zeros(Npackets, 2, floor((Nsteps - packet_step_start) / packet_steps_per_save));
+k_save = zeros(Npackets, 2, floor((Nsteps - packet_step_start) / packet_steps_per_save));
+t_background_save = zeros(1, floor(Nsteps / steps_per_save));
+t_packet_save = zeros(1, floor((Nsteps - packet_step_start) / packet_steps_per_save));
 
 frame = 1;
 packet_frame = 1;
@@ -74,57 +80,120 @@ qk = qk + dt/2*(3*Q_n_minus(:,:,1) - Q_n_minus(:,:,2));
 tic
 fprintf("Simulation progress:  0.00%%")
 Ef = filter(kx_, ky_, h);
-do_packet_simulation = true;
+t = 2*dt;
+S = sparsity(Npackets);
 for step=4:Nsteps
    prev_qk = qk;
    [dq, Qn] = AB3(qk, K2, K_d2, beta, kx_, ky_, dt, Q_n_minus);
+   t = t + dt;
    Q_n_minus(:,:,2) = Q_n_minus(:,:,1);
    Q_n_minus(:,:,1) = Qn;
    qk = qk + dq;
    qk = Ef  .* qk;% At some point, try to get hyperdiffusion working here
    
    % Do wavepacket advection
-   if(do_packet_simulation)
+   if(t > packet_delay)
        background_flow1 = grid_U(prev_qk, K_d2, K2, kx_, ky_);
        background_flow2 = grid_U(qk, K_d2, K2, kx_, ky_);
        ray_ode = generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, dt, h);
        y0 = ode_xk2y(Npackets, packet_x, packet_k);
-       opts = odeset('Jpattern', sparsity(Npackets));
+       opts = odeset('Jpattern', S);
        [t_steps, solver_y] = ode15s(ray_ode, [0, dt], y0, opts);
        [packet_x, packet_k] = ode_y2xk(Npackets, solver_y(end,:)');
+   end
+   
+   if(t > packet_delay && mod(step, packet_steps_per_save) == 0)
+      packet_frame = packet_frame + 1; 
+      x_save(:, :, packet_frame) = mod(packet_x + L/2, L) - L/2;
+      k_save(:, :, packet_frame) = packet_k;
+      t_packet_save(packet_frame) = t;
    end
    
    if(mod(step, steps_per_save) == 0)
        frame = frame + 1;
        q_save(:,:,frame) = k2g(qk);
-       x_save(:, :, frame) = mod(packet_x + L/2, L) - L/2;
-       k_save(:, :, frame) = packet_k;
+       t_background_save(frame) = t;
    end
    if mod(step, 51) == 0
         fprintf("\b\b\b\b\b\b\b% 6.2f%%", step/Nsteps*100)
    end
 end
 fprintf("\b\b\b\b\b\b\b100.00%%\n");
-toc
+time_elapsed = toc;
 
-figure()
-contourf(X, Y, q_save(:,:,1), 18,'LineColor','none');
+% Plotting options
+
+do_write_video = true;
+image_path = '../images/';
+datefmt = "yyyy-MM-dd HH_mm_ss";
+movie_filename = image_path + "QG_t_" + string(datetime("now"), datefmt);
+v = VideoWriter(movie_filename);
+q_max = max(abs(q_save), [], 'all');
+
+% plotting variables for animation
+pv_data = q_save(:,:,1);
+packet_x_data = [];
+packet_y_data = [];
+
+% create plots
+figure();
 hold on
-scatter(squeeze(x_save(:,1,1)), squeeze(x_save(:,2,1)), 25, 'k.');
+[~,qg_contour_plot] = contourf(X, Y, pv_data, 18,'LineColor','none');
+qg_contour_plot.ZDataSource = 'pv_data';
+
+packet_scatter_plot = scatter(packet_x_data, packet_y_data, 25, 'k.');
+packet_scatter_plot.XDataSource = 'packet_x_data';
+packet_scatter_plot.YDataSource = 'packet_y_data';
 hold off
+
+axis image
 colormap(redblue)
-colorbar()
-caxis([-0.25, 0.25])
-pause(1);
-for i=2:frame
-    contourf(X, Y, q_save(:,:,i), 18,'LineColor','none');
-    hold on
-    scatter(squeeze(x_save(:,1,i)), squeeze(x_save(:,2,i)), 25, 'k.');
-    hold off
-    colorbar()
-    caxis([-0.25, 0.25])
-    pause(1/30);
+caxis([-q_max, q_max])
+c = colorbar();
+c.Label.String = "PV";
+xlabel('X');
+ylabel('Y');
+title_text_array = {"";sprintf("\\fontsize{8}\\color{gray}\\rmf: %.1f, C_g: %.2f, T (1/f): %.3f, time elapsed: %.2f sec", f, Cg, T*f, time_elapsed); ""};
+title(title_text_array);
+
+open(v);
+for i=1:frame
+    background_flow = grid_U(g2k(q_save(:,:,i)), K_d2, K2, kx_, ky_);
+    speed2 = background_flow.u.^2 + background_flow.v.^2;
+    Umax = max(speed2, [], 'all');
+    if(i > packet_frame_start)
+        for j = 1:steps_per_save / packet_steps_per_save
+            alpha = packet_steps_per_save * j / steps_per_save;
+            pv_data =  alpha * q_save(:,:,i) + (1 - alpha) * q_save(:,:,i - 1);
+            save_index = (i - packet_frame_start - 1) * steps_per_save / packet_steps_per_save + j;
+            if(save_index > packet_frame)
+               break 
+            end
+            packet_x_data = squeeze(x_save(:,1,save_index));
+            packet_y_data = squeeze(x_save(:,2,save_index));
+            title_text_array{1} = sprintf("t = %6.3f (1/f)", t_packet_save(save_index)*f);
+            title_text_array{3} = sprintf("\\fontsize{8}\\color{gray}\\rmU_{max}: %5.3f, Fr: %5.3f", Umax, Umax/Cg);
+            title(title_text_array);
+            refreshdata
+            if(do_write_video)
+                fig_frame = getframe(gcf);
+                writeVideo(v,fig_frame);
+            end
+        end
+    else
+        pv_data =  q_save(:,:,i);
+        title_text_array{1} = sprintf("t = %6.3f (1/f)", t_background_save(i)*f);
+        title_text_array{3} = sprintf("\\fontsize{8}\\color{gray}\\rmU_{max}: %5.3f, Fr: %5.3f", Umax, Umax/Cg);
+        title(title_text_array);
+        refreshdata
+        if(do_write_video)
+            fig_frame = getframe(gcf);
+            writeVideo(v,fig_frame);
+        end
+    end
+
 end
+close(v);
 
 function q=initial_q(X, Y, a_g, K_d2)
     % Inital background PV
