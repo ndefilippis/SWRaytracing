@@ -1,4 +1,14 @@
-function time_elapsed = qgsw_raytrace(nx, Npackets, T_days, f, Cg)
+function time_elapsed = qgsw_raytrace(nx, Npackets, near_inertial_factor, T_days, packet_delay_days, U_g, f, Cg)
+% Input:
+% nx: resolution of QG flow
+% Npackets: number of packets to advect
+% near_inertial_factor: How close to f the initial wavenumbers are
+% T_days: number of days to simulate
+% packet_delay_days: Number of days to wait before simulation packets
+% U_g: amplitude of background geostrophic flow
+% f: Coriolis parameter
+% Cg: Group velocity of the waves (equal to sqrt(gH))
+
 % Set up domain
 L = 2*pi;
 dx = L/nx;
@@ -14,17 +24,12 @@ rng(146);
 beta = 0;
 K_d2 = f/Cg;
 T = T_days/f;
-a_g = 0.1; % amplitude of initial background speed
 CFL_fraction = 0.1;
-
-% Wave packet parameters
-near_inertial_factor = 1.1; %How close to f the initial wavenumbers
-
 
 % Output parameters
 steps_per_save = 50; % Has to be bigger than 3 or it wont save the initial AB steps
-packet_delay = 0.75*T;
-packet_steps_per_save = 1;
+packet_delay = packet_delay_days / f;
+packet_steps_per_save = 5;
 pv_filename = 'pv';
 pv_time_filename = 'pv_time';
 packet_x_filename = 'packet_x';
@@ -36,7 +41,7 @@ log_level = 1;
 % Set up initial conditions
 t = 0;
 
-q = initial_q(X, Y, a_g, K_d2, K2, kx_, ky_);
+q = initial_q(X, Y, U_g, K_d2, K2, kx_, ky_);
 qk = g2k(q);
 
 packet_x = zeros(Npackets, 2);
