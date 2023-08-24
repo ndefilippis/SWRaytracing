@@ -9,7 +9,7 @@ function FI = interpolate(x, y, F, dx, dy)
 % nx = 2*(kmax+1)
 % dx = 2*pi/nx 
 
-Iord = 1;
+Iord = 2;
 bump = 10^(-10); % Prevent NaNs
 
 [nx,ny] = size(F);
