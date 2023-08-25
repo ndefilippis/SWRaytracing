@@ -35,13 +35,18 @@ pv_time_filename = 'pv_time';
 packet_x_filename = 'packet_x';
 packet_k_filename = 'packet_k';
 packet_time_filename = 'packet_time';
-log_level = 1;
+
+% Create log levels
+LOG_ERROR = 0;
+LOG_STANDARD = 1;
+LOG_VERBOSE = 2;
+log_message = create_logger(LOG_STANDARD);
 
 
 % Set up initial conditions
 t = 0;
 
-q = initial_q(X, Y, U_g, K_d2, K2, kx_, ky_);
+q = initial_q(X, Y, U_g, K_d2);
 qk = g2k(q);
 
 packet_x = zeros(Npackets, 2);
@@ -56,7 +61,7 @@ flow = grid_U(qk, K_d2, K2, kx_, ky_);
 speed2 = flow.u.^2 + flow.v.^2;
 U0 = sqrt(max(speed2(:)));
 Fr = U0/Cg;
-log_message("Froude Number: %f\n", log_level, Fr);
+log_message("Froude Number: %f\n", LOG_STANDARD, Fr);
 
 dt = CFL_fraction*dx/U0;
 
@@ -91,7 +96,7 @@ Ef = filter(kx_, ky_, dx);
 % Initialize Adams-Bashforth inital steps using:
 % 1. Forward Euler
 % 2. Second order AB
-log_message("Simulation progress:  0.00%%", log_level)
+log_message("Simulation progress:  0.00%%", LOG_VERBOSE)
 for step=1:Nsteps
    prev_qk = qk;
    if(step == 1)
@@ -145,26 +150,31 @@ for step=1:Nsteps
        write_field(t, pv_time_filename, frame);
    end
    if mod(step, 51) == 0
-        log_message("\b\b\b\b\b\b\b% 6.2f%%", log_level, step/Nsteps*100)
+        log_message("\b\b\b\b\b\b\b% 6.2f%%", LOG_VERBOSE, step/Nsteps*100)
    end
 end
-log_message("\b\b\b\b\b\b\b100.00%%\n", log_level);
+log_message("\b\b\b\b\b\b\b100.00%%\n", LOG_VERBOSE);
 time_elapsed = toc;
-log_message("Real time elapsed: %.3f seconds\n", log_level,time_elapsed);
+log_message("Real time elapsed: %.3f seconds\n", LOG_STANDARD, time_elapsed);
 end
 
-function log_message(output_string, log_level, varargin)
-    if(log_level)
-       fprintf(output_string, varargin{:}); 
+function log_message = create_logger(max_log_level)
+    function log_func(output_string, log_level, varargin)
+        if(log_level <= max_log_level)
+            fprintf(output_string, varargin{:}); 
+        end
     end
+    log_message = @log_func;
 end
 
-function q=initial_q(X, Y, a_g, K_d2, K2, kx_, ky_)
+function q=initial_q(X, Y, a_g, K_d2)
     % Inital background PV
     % set as a ring of intermediate wavenumbers
     k_min = 1;
     k_max = 3;
     q = 0*X;
+    U = 0*X;
+    V = 0*X;
     phase = 2*pi*rand(2*k_max + 1, 2*k_max + 1);
     for k=-k_max:k_max
         for l=-k_max:k_max
@@ -172,14 +182,14 @@ function q=initial_q(X, Y, a_g, K_d2, K2, kx_, ky_)
                 % Keep track of total eta to normalize after the face
                 wave_phase = k*X + l*Y + phase(k+k_max + 1, l+k_max + 1);
                 % The constant here is to satisfy geostrophy
-                q = q - (K_d2 + k^2 + l^2)*real(exp(1i*wave_phase));
+                U = U - l*sin(wave_phase);
+                V = V + k*sin(wave_phase);
+                q = q - (K_d2 + k^2 + l^2)*cos(wave_phase);
             end
         end
     end
-    flow = grid_U(g2k(q), K_d2, K2, kx_, ky_);
-    speed2 = flow.u.^2 + flow.v.^2;
+    speed2 = U.^2 + V.^2;
     q = a_g/sqrt(max(speed2(:))) * q;
-    
 end
 
 function Ef=filter(kx_, ky_, dx)
