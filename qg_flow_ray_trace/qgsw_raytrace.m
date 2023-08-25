@@ -112,6 +112,7 @@ Ef = filter(kx_, ky_, dx);
 % 1. Forward Euler
 % 2. Second order AB
 log_message("Simulation progress:  0.00%%", LOG_VERBOSE)
+
 for step=1:Nsteps
    prev_qk = qk;
    if(step == 1)
@@ -185,8 +186,8 @@ end
 function q=initial_q(X, Y, a_g, K_d2)
     % Inital background PV
     % set as a ring of intermediate wavenumbers
-    k_min = 1;
-    k_max = 3;
+    k_min = 5;
+    k_max = 8;
     q = 0*X;
     U = 0*X;
     V = 0*X;
