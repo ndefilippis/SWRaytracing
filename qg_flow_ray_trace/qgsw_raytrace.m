@@ -1,4 +1,4 @@
-function time_elapsed = qgsw_raytrace(nx, Npackets, near_inertial_factor, T_days, packet_delay_days, U_g, f, Cg)
+function qgsw_raytrace(nx, Npackets, near_inertial_factor, T_days, packet_delay_days, U_g, f, Cg)
 % Input:
 % nx: resolution of QG flow
 % Npackets: number of packets to advect
@@ -38,9 +38,9 @@ packet_time_filename = 'packet_time';
 
 % Create log levels
 LOG_ERROR = 0;
-LOG_STANDARD = 1;
+LOG_INFO = 1;
 LOG_VERBOSE = 2;
-log_message = create_logger(LOG_STANDARD);
+log_message = create_logger(LOG_INFO);
 
 
 % Set up initial conditions
@@ -61,12 +61,27 @@ flow = grid_U(qk, K_d2, K2, kx_, ky_);
 speed2 = flow.u.^2 + flow.v.^2;
 U0 = sqrt(max(speed2(:)));
 Fr = U0/Cg;
-log_message("Froude Number: %f\n", LOG_STANDARD, Fr);
 
 dt = CFL_fraction*dx/U0;
 
 Nsteps = ceil(T/dt);
 packet_step_start = ceil(packet_delay / dt);
+
+% Write out parameters:
+log_message("Resolution: %dx%d\n", LOG_INFO, nx, nx);
+log_message("Number of packets: %d\n", LOG_INFO, Npackets);
+log_message("Initial wavenumber radius: %f\n", LOG_INFO, near_inertial_factor * f);
+log_message("Time step: %f\n", LOG_INFO, dt);
+log_message("Simulation time: %f\n", LOG_INFO, T);
+log_message("Spin-up time: %f\n", LOG_INFO, packet_delay);
+log_message("Steps per save: %d\n", LOG_INFO, steps_per_save);
+log_message("Steps per packet save: %d\n", LOG_INFO, packet_steps_per_save);
+log_message("Coriolis parameter: %f\n", LOG_INFO, f);
+log_message("Group velocity: %f\n", LOG_INFO, Cg);
+log_message("Background velocity (parameter,computed): (%f,%f)\n", LOG_INFO, U_g, U0);
+log_message("Froude Number: %f\n", LOG_INFO, Fr);
+log_message("Deformation wavenumber: %f\n", LOG_INFO, K_d2);
+
 
 t_background_save = zeros(1 + floor(Nsteps / steps_per_save), 1);
 q_save = zeros(nx, nx, 1 + floor(Nsteps / steps_per_save));
@@ -155,7 +170,7 @@ for step=1:Nsteps
 end
 log_message("\b\b\b\b\b\b\b100.00%%\n", LOG_VERBOSE);
 time_elapsed = toc;
-log_message("Real time elapsed: %.3f seconds\n", LOG_STANDARD, time_elapsed);
+log_message("Real time elapsed: %.3f seconds\n", LOG_INFO, time_elapsed);
 end
 
 function log_message = create_logger(max_log_level)
