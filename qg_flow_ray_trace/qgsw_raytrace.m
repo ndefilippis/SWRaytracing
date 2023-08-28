@@ -40,7 +40,7 @@ packet_time_filename = './data/packet_time';
 LOG_ERROR = 0;
 LOG_INFO = 1;
 LOG_VERBOSE = 2;
-log_message = create_logger(LOG_INFO);
+log_message = create_logger(LOG_VERBOSE);
 
 
 % Set up initial conditions
@@ -166,10 +166,10 @@ for step=1:Nsteps
        write_field(t, pv_time_filename, frame);
    end
    if mod(step, 51) == 0
-        log_message("\b\b\b\b\b\b\b% 6.2f%%", LOG_VERBOSE, step/Nsteps*100)
+        log_message("% 6.2f%%\n", LOG_VERBOSE, step/Nsteps*100)
    end
 end
-log_message("\b\b\b\b\b\b\b100.00%%\n", LOG_VERBOSE);
+log_message("100.00%%\n", LOG_VERBOSE);
 time_elapsed = toc;
 log_message("Real time elapsed: %.3f seconds\n", LOG_INFO, time_elapsed);
 end
