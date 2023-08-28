@@ -51,8 +51,9 @@ qk = g2k(q);
 
 packet_x = zeros(Npackets, 2);
 packet_k = zeros(Npackets, 2);
+wavenumber_factor = sqrt((near_inertial_factor^2 - 1)*f^2/Cg^2);
 for i=1:Npackets
-   packet_k(i, :) = near_inertial_factor * f * [cos(2*pi*i/Npackets), sin(2*pi*i/Npackets)]; 
+   packet_k(i, :) = wavenumber_factor * [cos(2*pi*i/Npackets), sin(2*pi*i/Npackets)]; 
    packet_x(i, :) = L*(rand(1, 2)) - L/2;
 end
 
