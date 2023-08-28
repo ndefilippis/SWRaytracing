@@ -30,11 +30,11 @@ CFL_fraction = 0.1;
 steps_per_save = 50; % Has to be bigger than 3 or it wont save the initial AB steps
 packet_delay = packet_delay_days / f;
 packet_steps_per_save = 5;
-pv_filename = 'pv';
-pv_time_filename = 'pv_time';
-packet_x_filename = 'packet_x';
-packet_k_filename = 'packet_k';
-packet_time_filename = 'packet_time';
+pv_filename = './data/pv';
+pv_time_filename = './data/pv_time';
+packet_x_filename = './data/packet_x';
+packet_k_filename = './data/packet_k';
+packet_time_filename = './data/packet_time';
 
 % Create log levels
 LOG_ERROR = 0;
