@@ -24,7 +24,7 @@ rng(146);
 beta = 0;
 K_d2 = f/Cg;
 T = T_days/f;
-CFL_fraction = 0.1;
+CFL_fraction = 0.05;
 
 % Output parameters
 steps_per_save = 50; % Has to be bigger than 3 or it wont save the initial AB steps
@@ -84,17 +84,17 @@ log_message("Froude Number: %f\n", LOG_INFO, Fr);
 log_message("Deformation wavenumber: %f\n", LOG_INFO, K_d2);
 
 
-t_background_save = zeros(1 + floor(Nsteps / steps_per_save), 1);
-q_save = zeros(nx, nx, 1 + floor(Nsteps / steps_per_save));
-x_save = zeros(Npackets, 2, 1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save));
-k_save = zeros(Npackets, 2, 1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save));
-t_packet_save = zeros(1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save), 1);
+%t_background_save = zeros(1 + floor(Nsteps / steps_per_save), 1);
+%q_save = zeros(nx, nx, 1 + floor(Nsteps / steps_per_save));
+%x_save = zeros(Npackets, 2, 1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save));
+%k_save = zeros(Npackets, 2, 1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save));
+%t_packet_save = zeros(1 + floor((Nsteps - packet_step_start + 1) / packet_steps_per_save), 1);
 
 frame = 1;
 packet_frame = 1;
-q_save(:, :, frame) = q;
-x_save(:, :, packet_frame) = packet_x;
-k_save(:, :, packet_frame) = packet_k;
+%q_save(:, :, frame) = q;
+%x_save(:, :, packet_frame) = packet_x;
+%k_save(:, :, packet_frame) = packet_k;
 
 % Write initial positions
 write_field(packet_x, packet_x_filename, packet_frame);
@@ -148,9 +148,9 @@ for step=1:Nsteps
    
    if(t > packet_delay && mod(step - packet_step_start + 1, packet_steps_per_save) == 0)
       packet_frame = packet_frame + 1; 
-      x_save(:, :, packet_frame) = mod(packet_x + L/2, L) - L/2;
-      k_save(:, :, packet_frame) = packet_k;
-      t_packet_save(packet_frame) = t;
+      %x_save(:, :, packet_frame) = mod(packet_x + L/2, L) - L/2;
+      %k_save(:, :, packet_frame) = packet_k;
+      %t_packet_save(packet_frame) = t;
       
       % Write fields
       write_field(mod(packet_x + L/2, L) - L/2, packet_x_filename, packet_frame);
@@ -161,8 +161,8 @@ for step=1:Nsteps
    if(mod(step, steps_per_save) == 0)
        frame = frame + 1;
        q = k2g(qk);
-       q_save(:,:,frame) = q;
-       t_background_save(frame) = t;
+       %q_save(:,:,frame) = q;
+       %t_background_save(frame) = t;
        write_field(q, pv_filename, frame);
        write_field(t, pv_time_filename, frame);
    end

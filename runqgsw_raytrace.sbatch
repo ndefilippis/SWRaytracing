@@ -4,17 +4,20 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=8GB
-#SBATCH --time=8:00:00
+#SBATCH --time=24:00:00
 #SBATCH --job-name=qgsw_raytracing
 #SBATCH --output=slurm_%A_%a.out
-#SBATCH --array=0-9
+#SBATCH --array=1-20
   
 module purge
 module load matlab/2020b
 
-Ugs=(0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
+config=parameters.txt
 
-Ug=${Ugs[$SLURM_ARRAY_TASK_ID]}
+w0=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $2}' $config)
+Ug=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $3}' $config)
+f=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $4}' $config)
+Cg=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $5}' $config)
 
 rundir=$SCRATCH/swqg_raytracing/run-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID/.*}
 mkdir -p $rundir
@@ -25,7 +28,7 @@ cp qgsw_raytrace.m $rundir
 cd $rundir
 mkdir data
 
-matlab -nodisplay -r "qgsw_raytrace(256, 50, 2, 2000, 1200, $Ug, 3, 1); exit()" > run.log
+matlab -nodisplay -r "qgsw_raytrace(256, 50, $w0, 6000, 1000, $Ug, $f, $Cg); exit()" > run.log
 
 exit
 
