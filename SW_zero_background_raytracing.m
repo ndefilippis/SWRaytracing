@@ -1,14 +1,18 @@
+addpath ./qg_flow_ray_trace
+
 image_path = "images/";
 write_file = false;
 
+run_log_file = "analysis/job-36976465/run-4/run.log";
+[nx, ~, f, Cg, Ug] = parse_data(run_log_file);
+K_d2 = f/Cg;
+
+kmax = nx/2-1;
+[kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
+K2 = kx_.^2 + ky_.^2;
+
 rng(123)
-
-f = 3
-gH = 1
-Cg = sqrt(gH);
-
 L = 2*pi;
-nx = 512;
 
 X = linspace(-L/2, L/2, nx);
 [XX, YY] = meshgrid(X);
@@ -16,10 +20,12 @@ X = linspace(-L/2, L/2, nx);
 %streamfunction = @(x, y, t) (0.05*(x.^2 + y.^2 - x.^4));
 %scheme = DifferenceScheme(streamfunction);
 
-load ./ray_trace_sw/wavevort_231058_restart_frame100
+times = read_field("analysis/pv_time");
+q = read_field("analysis/pv", nx, nx, 1, [2000]);
+background_flow = grid_U(g2k(q), K_d2, K2, kx_, ky_);
 %S = zeros(nx, nx, 3);
 %S(:,:,3) = 0.05;
-scheme = SpectralScheme(Cg, f, L, nx, S);
+scheme = SpectralScheme(L, nx, k2g(-g2k(q)./(K_d2 + K2)));
 
 Nparticles = 10;
 
@@ -34,13 +40,12 @@ end
 U = scheme.U([XX(:), YY(:)]);
 speed = vecnorm(U, 2, 2);
 U0 = max(speed(:));
-C0 = sqrt(gH);
 gH = Cg^2;
-Fr = U0/C0
+Fr = U0/Cg;
 dx = L/nx;
-dt = 0.5*dx/max(C0, U0);
+dt = 0.5*dx/max(Cg, U0);
 
-Tend = 1/(f*Fr^2);
+Tend = 10/(f*Fr^2);
 Nsteps = floor(Tend/dt)
 % figure
 % subplot(1,1,1);
@@ -50,53 +55,49 @@ Nsteps = floor(Tend/dt)
 Omega_0 = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
 error = zeros(Nsteps + 1, Nparticles);
 solver_error = zeros(Nsteps + 1, Nparticles);
-solver2_error = zeros(Nsteps + 1, Nparticles);
 
 t_hist = zeros(Nsteps + 1, 1);
 x_hist = zeros(Nsteps + 1, Nparticles, 2);
 k_hist = zeros(Nsteps + 1, Nparticles, 2);
 solver_x = zeros(Nsteps + 1, Nparticles, 2);
 solver_k = zeros(Nsteps + 1, Nparticles, 2);
-solver_x2 = zeros(Nsteps + 1, Nparticles, 2);
-solver_k2 = zeros(Nsteps + 1, Nparticles, 2);
 
 t_hist(1) = 0;
 x_hist(1,:,:) = x;
 k_hist(1,:,:) = k;
 
-y0 = [x(:,1); x(:,2); k(:,1); k(:,2)];
+y0 = [x k];
 
-
-opts1 = odeset('RelTol', 1e-3, 'AbsTol', 1e-5);
-opts2 = odeset('RelTol', 1e-5, 'AbsTol', 1e-7);
-method1 = @ode23;
-method2 = @ode23;
+opts = odeset('RelTol', 1e-5, 'AbsTol', 1e-7);
+method = @ode23;
 
 rayfun = initialize_raytracing(scheme, f, gH, Nparticles);
 t_hist = dt * (0:Nsteps);
-fprintf(func2str(method1)+" with 1e-3 tol:\n")
+fprintf(func2str(method)+" with 1e-5 tol:\n")
 tic
-[t_hist, solver_y] = method1(rayfun, t_hist, y0, opts1);
-toc
-fprintf(func2str(method2)+" with 1e-5 tol:\n")
-tic
-[t_hist, solver_y2] = method2(rayfun, t_hist, y0, opts);
+[t_hist, solver_y] = method(rayfun, t_hist, y0(:), opts);
 toc
 solver_x(:,:,1) = solver_y(:,1:Nparticles);
 solver_x(:,:,2) = solver_y(:,Nparticles+1:2*Nparticles);
 solver_k(:,:,1) = solver_y(:,2*Nparticles+1:3*Nparticles);
 solver_k(:,:,2) = solver_y(:,3*Nparticles+1:4*Nparticles);
-solver_x2(:,:,1) = solver_y2(:,1:Nparticles);
-solver_x2(:,:,2) = solver_y2(:,Nparticles+1:2*Nparticles);
-solver_k2(:,:,1) = solver_y2(:,2*Nparticles+1:3*Nparticles);
-solver_k2(:,:,2) = solver_y2(:,3*Nparticles+1:4*Nparticles);
 
-for i = 1:Nsteps
-    Omega_abs = omega(squeeze(solver_k(i,:,:)), f, gH) + dot(scheme.U(squeeze(solver_x(i,:,:)), t), squeeze(solver_k(i,:,:)), 2);
-    solver_error(i+1,:) = (Omega_abs - Omega_0) ./ Omega_0;
-    Omega_abs = omega(squeeze(solver_k2(i,:,:)), f, gH) + dot(scheme.U(squeeze(solver_x2(i,:,:)), t), squeeze(solver_k2(i,:,:)), 2);
-    solver2_error(i+1,:) = (Omega_abs - Omega_0) ./ Omega_0;
+solver_k = permute(solver_k, [2, 3, 1]);
+solver_x = permute(solver_x, [2, 3, 1]);
+
+w = squeeze(omega(solver_k, f, gH));
+Omega_abs = squeeze(omega(solver_k, f, gH) + dot(scheme.U(solver_x, t), solver_k, 2));
+solver_error = (Omega_abs - Omega_0) ./ Omega_0;
+
+for i=1:40:Nsteps
+   contour(XX, YY, scheme.streamfunction(XX, YY));
+   axis image
+   hold on
+   scatter(mod(solver_x(:,1,i) + L/2, L) - L/2, mod(solver_x(:,2,i) + L/2, L) - L/2, 30, 'k.');
+   hold off
+   pause(1/20); 
 end
+
 
 %tic
 %fprintf("Simulation progress:  0.00%%")
@@ -122,38 +123,36 @@ solver_error_plot = plot(t_hist * (f*Fr^2), solver_error, "k");
 title("Error in absolute frequency");
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
-hold on
-solver2_error_plot = plot(t_hist * (f*Fr^2), solver2_error, 'r--');
-legend([solver_error_plot(1), solver2_error_plot(1)], func2str(method1) + " error", func2str(method2) + " error");
-xlabel("t (1/(f*Fr^2)");
-ylabel("\Delta\omega_a/\omega_0");
-
-function S = sparsity(Npackets)
-    S = zeros(4*Npackets);
-    for i=1:Npackets
-       for field=0:3
-           for field2=0:3
-            S(i + Npackets*field, i + Npackets*field2) = 1;
-            S(i + Npackets*field2, i + field*Npackets) = 1;
-           end
-       end
-    end
-end
 
 function rayode = initialize_raytracing(scheme, f, gH, Nparticles)
     function dydt = odefun(t,y)
-       x = [y(1:Nparticles), y(Nparticles+1:2*Nparticles)];
-       k = [y(2*Nparticles+1:3*Nparticles), y(3*Nparticles+1:4*Nparticles)];
+       y = reshape(y,Nparticles,[]);
+       x = y(:,1:2);
+       k = y(:,3:4);
        dxdt = scheme.U(x, t) + grad_omega(k, f, gH);
        dkdt = -scheme.grad_U_times_k(x, k, t);
-       dydt = zeros(4*Nparticles, 1);
-       dydt(0*Nparticles + 1:1*Nparticles,:) = dxdt(:, 1);
-       dydt(1*Nparticles + 1:2*Nparticles,:) = dxdt(:, 2);
-       dydt(2*Nparticles + 1:3*Nparticles,:) = dkdt(:, 1);
-       dydt(3*Nparticles + 1:4*Nparticles,:) = dkdt(:, 2);
-       
+       dydt = [dxdt dkdt];
+       dydt = dydt(:);       
     end
     rayode = @odefun;
+end
+
+function [resolution, Npackets, f, Cg, Ug] = parse_data(filename) 
+    [fid,status]=fopen(filename);
+    if(status)
+        disp(status);
+        return;
+    end
+    resolution_cell = textscan(fid,'Resolution: %fx%f',1,'delimiter','\n', 'headerlines', 10);    
+    Npackets_cell = textscan(fid, "Number of packets: %d",1);
+    f_cell = textscan(fid, "Coriolis parameter: %f",'delimiter','\n', 'headerlines', 7);
+    Cg_cell = textscan(fid,  "Group velocity: %f", 1);
+    Ug_cell = textscan(fid, "Background velocity (parameter,computed): (%f,%f)", 1);
+    resolution = resolution_cell{1};
+    Npackets = Npackets_cell{1};
+    f = f_cell{1};
+    Cg = Cg_cell{1};
+    Ug = Ug_cell{1};
 end
 
 function omega_s=spectrum(x, k, t)

@@ -1,9 +1,9 @@
 classdef SpectralScheme < RaytracingScheme
     properties
-        U_field, GradU_field, etag_field, L
+        U_field, GradU_field, psi_field, L
     end
     methods
-        function obj = SpectralScheme(Cg, f, L, nx, S)
+        function obj = SpectralScheme(L, nx, psi_field)
             addpath ./rsw/
             addpath ./ray_trace_sw/
             
@@ -13,23 +13,10 @@ classdef SpectralScheme < RaytracingScheme
             [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
             K2_ = kx_.^2 + ky_.^2;
             
-            % In .mat file, variable Cg = sqrt(g*H0).  Here we'll
-            % define gH0 = Cg^2, C0 = Cg
-            gH0 = Cg^2;
-            C0 = Cg;
-            
-            sig2_ = f^2 + gH0*K2_;
-            
-            uk   = g2k(S(:,:,1));
-            vk   = g2k(S(:,:,2));
-            etak = g2k(S(:,:,3));
-            zetak  = 1i*(kx_.*vk - ky_.*uk);
-            etagk = (f*etak-zetak).*f./sig2_;
-            % zetagk = -gH0/f*etagk.*K2_;
-            
+            psik   = g2k(psi_field);            
             % Extract geostrophic velocities
-            ugk = -1i*ky_.*(gH0/f*etagk);
-            vgk = 1i*kx_.*(gH0/f*etagk);
+            ugk = -1i*ky_.*psik;
+            vgk = 1i*kx_.*psik;
             
             % Get gradients
             ugxk = 1i*kx_.*ugk;
@@ -38,7 +25,7 @@ classdef SpectralScheme < RaytracingScheme
             vgyk = 1i*ky_.*vgk;
             
             % Get fields in x-space
-            obj.etag_field = k2g(etagk);
+            obj.psi_field = k2g(psik);
             obj.U_field.u = k2g(ugk);
             obj.U_field.v = k2g(vgk);
             
@@ -49,25 +36,25 @@ classdef SpectralScheme < RaytracingScheme
         end
         
         function psi = streamfunction(obj, x, y, t)
-            dx = obj.L/size(obj.etag_field,1);
+            dx = obj.L/size(obj.psi_field,1);
             xx = x(:);
             yy = y(:);
-            psi = interpolate(xx,yy,obj.etag_field,dx,dx);
+            psi = interpolate(xx,yy,obj.psi_field,dx,dx);
             psi = reshape(psi, size(x));
         end
         
         function u = U(obj, x, t)
             dx = obj.L/size(obj.U_field.u,1);
-            xx = x(:, 1);
-            yy = x(:, 2);
+            xx = x(:,1,:);
+            yy = x(:,2,:);
             u(:,1) = interpolate(xx,yy,obj.U_field.u,dx,dx);
             u(:,2) = interpolate(xx,yy,obj.U_field.v,dx,dx);
         end
         
         function nablaU = grad_U(obj, x, t)
             dx = obj.L/size(obj.GradU_field.u_x,1);
-            xx = x(:, 1);
-            yy = x(:, 2);
+            xx = x(:, 1,:);
+            yy = x(:, 2,:);
             nablaU.u_x = interpolate(xx,yy,obj.GradU_field.u_x,dx,dx);
             nablaU.u_y = interpolate(xx,yy,obj.GradU_field.u_y,dx,dx);
             nablaU.v_x = interpolate(xx,yy,obj.GradU_field.v_x,dx,dx);
