@@ -1,12 +1,14 @@
 classdef SpectralScheme < RaytracingScheme
     properties
-        U_field, GradU_field, psi_field, L
+        U_field, GradU_field, psi_field, X_interp, Y_interp, L
     end
     methods
-        function obj = SpectralScheme(L, nx, psi_field)
+        function obj = SpectralScheme(L, nx, X_interp, Y_interp, psi_field)
             addpath ./rsw/
             addpath ./ray_trace_sw/
             
+            obj.X_interp = X_interp;
+            obj.Y_interp = Y_interp;
             obj.L = L;
             
             kmax = nx/2-1;
@@ -36,29 +38,35 @@ classdef SpectralScheme < RaytracingScheme
         end
         
         function psi = streamfunction(obj, x, y, t)
-            dx = obj.L/size(obj.psi_field,1);
-            xx = x(:);
-            yy = y(:);
-            psi = interpolate(xx,yy,obj.psi_field,dx,dx);
+            dx = obj.L/size(obj.psi_field, 1);
+            psi = interpolate(x,y,obj.psi_field,dx,dx);
+            %psi = interpolate2(obj.X_interp,obj.Y_interp,obj.psi_field,x,y,obj.L);
             psi = reshape(psi, size(x));
         end
         
         function u = U(obj, x, t)
-            dx = obj.L/size(obj.U_field.u,1);
+            dx = obj.L/size(obj.psi_field, 1);
             xx = x(:,1,:);
             yy = x(:,2,:);
-            u(:,1) = interpolate(xx,yy,obj.U_field.u,dx,dx);
-            u(:,2) = interpolate(xx,yy,obj.U_field.v,dx,dx);
+            u = zeros(size(x));
+            u(:,1,:) = reshape(interpolate(xx(:),yy(:),obj.U_field.u,dx,dx), size(xx));
+            u(:,2,:) = reshape(interpolate(xx(:),yy(:),obj.U_field.v,dx,dx), size(xx));
+            %u(:,1,:) = interpolate2(obj.X_interp,obj.Y_interp,obj.U_field.u,xx,yy,obj.L);
+            %u(:,2,:) = interpolate2(obj.X_interp,obj.Y_interp,obj.U_field.v,xx,yy,obj.L);
         end
         
         function nablaU = grad_U(obj, x, t)
-            dx = obj.L/size(obj.GradU_field.u_x,1);
-            xx = x(:, 1,:);
-            yy = x(:, 2,:);
-            nablaU.u_x = interpolate(xx,yy,obj.GradU_field.u_x,dx,dx);
-            nablaU.u_y = interpolate(xx,yy,obj.GradU_field.u_y,dx,dx);
-            nablaU.v_x = interpolate(xx,yy,obj.GradU_field.v_x,dx,dx);
-            nablaU.v_y = interpolate(xx,yy,obj.GradU_field.v_y,dx,dx);
+            dx = obj.L/size(obj.psi_field, 1);
+            xx = x(:,1,:);
+            yy = x(:,2,:);
+            nablaU.u_x = interpolate(xx(:),yy(:),obj.GradU_field.u_x,dx,dx);
+            nablaU.u_y = interpolate(xx(:),yy(:),obj.GradU_field.u_y,dx,dx);
+            nablaU.v_x = interpolate(xx(:),yy(:),obj.GradU_field.v_x,dx,dx);
+            nablaU.v_y = interpolate(xx(:),yy(:),obj.GradU_field.v_y,dx,dx);
+            %nablaU.u_x = interpolate2(obj.X_interp,obj.Y_interp,obj.GradU_field.u_x,xx,yy,obj.L);
+            %nablaU.u_y = interpolate2(obj.X_interp,obj.Y_interp,obj.GradU_field.u_y,xx,yy,obj.L);
+            %nablaU.v_x = interpolate2(obj.X_interp,obj.Y_interp,obj.GradU_field.v_x,xx,yy,obj.L);
+            %nablaU.v_y = interpolate2(obj.X_interp,obj.Y_interp,obj.GradU_field.v_y,xx,yy,obj.L);
         end
     end
 end

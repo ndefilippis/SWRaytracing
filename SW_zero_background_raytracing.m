@@ -13,11 +13,15 @@ K2 = kx_.^2 + ky_.^2;
 
 rng(123)
 L = 2*pi;
+dx = L/(nx - 1);
 
 X = linspace(-L/2, L/2, nx);
+num_interp_points = 4;
+X_interp = linspace(-L/2 - num_interp_points*dx, L/2 + num_interp_points*dx, nx + 2*num_interp_points);
 [XX, YY] = meshgrid(X);
+[XXi, YYi] = meshgrid(X_interp);
 
-%streamfunction = @(x, y, t) (0.05*(x.^2 + y.^2 - x.^4));
+%streamfunction = @(x, y, t) (0.5*(x.^2 + y.^2 - x.^4));
 %scheme = DifferenceScheme(streamfunction);
 
 times = read_field("analysis/pv_time");
@@ -25,50 +29,48 @@ q = read_field("analysis/pv", nx, nx, 1, [2000]);
 background_flow = grid_U(g2k(q), K_d2, K2, kx_, ky_);
 %S = zeros(nx, nx, 3);
 %S(:,:,3) = 0.05;
-scheme = SpectralScheme(L, nx, k2g(-g2k(q)./(K_d2 + K2)));
+scheme = SpectralScheme(L, nx, XXi, YYi, k2g(-g2k(q)./(K_d2 + K2)));
 
 Nparticles = 10;
 
-x = zeros(Nparticles, 2);
-k = zeros(Nparticles, 2);
+x = zeros(1, 2, Nparticles);
+k = zeros(1, 2, Nparticles);
 t = 0;
 for i=1:Nparticles
-   k(i, :) = 3 * [cos(2*pi*i/Nparticles), sin(2*pi*i/Nparticles)]; 
-   x(i, :) = L*(rand(1, 2)) - L/2;
+   k(1, :, i) = 3 * [cos(2*pi*i/Nparticles), sin(2*pi*i/Nparticles)]; 
+   x(1, :, i) = L*(rand(1, 2)) - L/2;
 end
 
 U = scheme.U([XX(:), YY(:)]);
 speed = vecnorm(U, 2, 2);
+dx = L/nx;
 U0 = max(speed(:));
 gH = Cg^2;
-Fr = U0/Cg;
-dx = L/nx;
-dt = 0.5*dx/max(Cg, U0);
+Fr = U0/Cg
+dt = 0.1*dx/max(Cg, U0);
 
-Tend = 10/(f*Fr^2);
+Tend = 1/(f*Fr^2);
 Nsteps = floor(Tend/dt)
 % figure
 % subplot(1,1,1);
 % omega_s = spectrum(x, k, t);
 % histogram(omega_s);
 % figure
-Omega_0 = omega(k, f, gH) + dot(scheme.U(x, t), k, 2);
-error = zeros(Nsteps + 1, Nparticles);
-solver_error = zeros(Nsteps + 1, Nparticles);
+Omega_0 = squeeze(omega(k, f, gH) + dot(scheme.U(x, t), k, 2));
 
 t_hist = zeros(Nsteps + 1, 1);
-x_hist = zeros(Nsteps + 1, Nparticles, 2);
-k_hist = zeros(Nsteps + 1, Nparticles, 2);
-solver_x = zeros(Nsteps + 1, Nparticles, 2);
-solver_k = zeros(Nsteps + 1, Nparticles, 2);
+x_hist = zeros(Nsteps + 1, 2, Nparticles);
+k_hist = zeros(Nsteps + 1, 2, Nparticles);
+solver_x = zeros(Nsteps + 1, 2, Nparticles);
+solver_k = zeros(Nsteps + 1, 2, Nparticles);
 
 t_hist(1) = 0;
 x_hist(1,:,:) = x;
 k_hist(1,:,:) = k;
 
-y0 = [x k];
+y0 = [squeeze(x)' squeeze(k)'];
 
-opts = odeset('RelTol', 1e-5, 'AbsTol', 1e-7);
+opts = odeset('RelTol', 1e-7, 'AbsTol', 1e-8);
 method = @ode23;
 
 rayfun = initialize_raytracing(scheme, f, gH, Nparticles);
@@ -77,26 +79,27 @@ fprintf(func2str(method)+" with 1e-5 tol:\n")
 tic
 [t_hist, solver_y] = method(rayfun, t_hist, y0(:), opts);
 toc
-solver_x(:,:,1) = solver_y(:,1:Nparticles);
-solver_x(:,:,2) = solver_y(:,Nparticles+1:2*Nparticles);
-solver_k(:,:,1) = solver_y(:,2*Nparticles+1:3*Nparticles);
-solver_k(:,:,2) = solver_y(:,3*Nparticles+1:4*Nparticles);
-
-solver_k = permute(solver_k, [2, 3, 1]);
-solver_x = permute(solver_x, [2, 3, 1]);
+solver_x(:,1,:) = solver_y(:,1:Nparticles);
+solver_x(:,2,:) = solver_y(:,Nparticles+1:2*Nparticles);
+solver_k(:,1,:) = solver_y(:,2*Nparticles+1:3*Nparticles);
+solver_k(:,2,:) = solver_y(:,3*Nparticles+1:4*Nparticles);
 
 w = squeeze(omega(solver_k, f, gH));
 Omega_abs = squeeze(omega(solver_k, f, gH) + dot(scheme.U(solver_x, t), solver_k, 2));
-solver_error = (Omega_abs - Omega_0) ./ Omega_0;
+solver_error = (Omega_abs' - Omega_0) ./ Omega_0;
 
-for i=1:40:Nsteps
-   contour(XX, YY, scheme.streamfunction(XX, YY));
-   axis image
-   hold on
-   scatter(mod(solver_x(:,1,i) + L/2, L) - L/2, mod(solver_x(:,2,i) + L/2, L) - L/2, 30, 'k.');
-   hold off
-   pause(1/20); 
-end
+% for i=1:4:Nsteps
+%   subplot(2, 1, 1);
+%   contour(XX, YY, scheme.streamfunction(XX, YY));
+%   axis image
+%   hold on
+%   scatter(mod(solver_x(i,1,:) + L/2, L) - L/2, mod(solver_x(i,2,:) + L/2, L) - L/2, 30, 'k.');
+%   hold off
+%   subplot(2, 1, 2);
+%   scatter(solver_k(i,1,:), solver_k(i,2,:));
+%   axis image;
+%   pause(1/10); 
+% end
 
 
 %tic

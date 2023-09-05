@@ -1,4 +1,4 @@
-function qgsw_raytrace(nx, Npackets, near_inertial_factor, T_days, packet_delay_days, U_g, f, Cg)
+function qgsw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, packet_delay_days, U_g, f, Cg)
 % Input:
 % nx: resolution of QG flow
 % Npackets: number of packets to advect
@@ -23,7 +23,7 @@ K2 = kx_.^2 + ky_.^2;
 rng(146);
 beta = 0;
 K_d2 = f/Cg;
-T = T_days/f;
+T_days = T_Fr_days/f;
 CFL_fraction = 0.05;
 
 % Output parameters
@@ -62,6 +62,8 @@ flow = grid_U(qk, K_d2, K2, kx_, ky_);
 speed2 = flow.u.^2 + flow.v.^2;
 U0 = sqrt(max(speed2(:)));
 Fr = U0/Cg;
+
+T = T_days / Fr^2;
 
 dt = CFL_fraction*dx/U0;
 

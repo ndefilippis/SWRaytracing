@@ -21,10 +21,11 @@ classdef DifferenceScheme < RaytracingScheme
             if(nargin < 3)
                 t = 0;
             end
-            xx = x(:, 1);
-            yy = x(:, 2);
-            u(:,2) = (obj.psi(xx + obj.h/2, yy, t) - obj.psi(xx - obj.h/2, yy, t))/obj.h;
-            u(:,1) = -(obj.psi(xx, yy + obj.h/2, t) - obj.psi(xx, yy - obj.h/2, t))/obj.h;
+            xx = x(:, 1,:);
+            yy = x(:, 2,:);
+            u = zeros(size(x));
+            u(:,2,:) = (obj.psi(xx + obj.h/2, yy, t) - obj.psi(xx - obj.h/2, yy, t))/obj.h;
+            u(:,1,:) = -(obj.psi(xx, yy + obj.h/2, t) - obj.psi(xx, yy - obj.h/2, t))/obj.h;
         end
         
         function nablaU = grad_U(obj, x, t)
