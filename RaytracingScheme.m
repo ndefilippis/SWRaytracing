@@ -7,9 +7,12 @@ classdef RaytracingScheme
     
     methods
         function nablaU_k = grad_U_times_k(obj, x, k, t)
-            nablaU = obj.grad_U(x, t);            
-            nablaU_k(:, 1) = nablaU.u_x .* k(:,1) + nablaU.v_x .* k(:,2);
-            nablaU_k(:, 2) = nablaU.u_y .* k(:,1) + nablaU.v_y .* k(:,2);
+            nablaU = obj.grad_U(x, t);        
+            kk = k(:,1,:);
+            ll = k(:,2,:);
+            nablaU_k = zeros(size(k));
+            nablaU_k(:, 1,:) = reshape(nablaU.u_x .* kk(:) + nablaU.v_x .* ll(:), size(kk));
+            nablaU_k(:, 2,:) = reshape(nablaU.u_y .* kk(:) + nablaU.v_y .* ll(:), size(ll));;
         end
         
         function eta=vorticity(obj, x, t)

@@ -13,13 +13,11 @@ K2 = kx_.^2 + ky_.^2;
 
 rng(123)
 L = 2*pi;
-dx = L/(nx - 1);
+dx = L/nx;
 
 X = linspace(-L/2, L/2, nx);
 num_interp_points = 4;
-X_interp = linspace(-L/2 - num_interp_points*dx, L/2 + num_interp_points*dx, nx + 2*num_interp_points);
 [XX, YY] = meshgrid(X);
-[XXi, YYi] = meshgrid(X_interp);
 
 %streamfunction = @(x, y, t) (0.5*(x.^2 + y.^2 - x.^4));
 %scheme = DifferenceScheme(streamfunction);
@@ -29,7 +27,7 @@ q = read_field("analysis/pv", nx, nx, 1, [2000]);
 background_flow = grid_U(g2k(q), K_d2, K2, kx_, ky_);
 %S = zeros(nx, nx, 3);
 %S(:,:,3) = 0.05;
-scheme = SpectralScheme(L, nx, XXi, YYi, k2g(-g2k(q)./(K_d2 + K2)));
+scheme = SpectralScheme(L, nx, k2g(-g2k(q)./(K_d2 + K2)));
 
 Nparticles = 10;
 
@@ -70,7 +68,7 @@ k_hist(1,:,:) = k;
 
 y0 = [squeeze(x)' squeeze(k)'];
 
-opts = odeset('RelTol', 1e-7, 'AbsTol', 1e-8);
+opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-7);
 method = @ode23;
 
 rayfun = initialize_raytracing(scheme, f, gH, Nparticles);
@@ -87,6 +85,12 @@ solver_k(:,2,:) = solver_y(:,3*Nparticles+1:4*Nparticles);
 w = squeeze(omega(solver_k, f, gH));
 Omega_abs = squeeze(omega(solver_k, f, gH) + dot(scheme.U(solver_x, t), solver_k, 2));
 solver_error = (Omega_abs' - Omega_0) ./ Omega_0;
+
+gap = 500;
+samples = w(1000:gap:end,:);
+samples = samples(:);
+hist(samples);
+
 
 % for i=1:4:Nsteps
 %   subplot(2, 1, 1);

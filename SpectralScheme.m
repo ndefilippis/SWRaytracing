@@ -3,12 +3,10 @@ classdef SpectralScheme < RaytracingScheme
         U_field, GradU_field, psi_field, X_interp, Y_interp, L
     end
     methods
-        function obj = SpectralScheme(L, nx, X_interp, Y_interp, psi_field)
+        function obj = SpectralScheme(L, nx, psi_field)
             addpath ./rsw/
             addpath ./ray_trace_sw/
             
-            obj.X_interp = X_interp;
-            obj.Y_interp = Y_interp;
             obj.L = L;
             
             kmax = nx/2-1;
