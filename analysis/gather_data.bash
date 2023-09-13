@@ -1,7 +1,7 @@
 #!/bin/bash
 
 slurm_job=run-$1
-for i in {0..24}
+for i in {1..2}
 do
   local_dir=job-$1/run-$i
   remote_dir=/scratch/nad9961/swqg_raytracing/run-$1_$i
