@@ -1,16 +1,16 @@
 addpath ../rsw
 
 L = 2*pi;
-nx = 32;
+nx = 64;
 x = linspace(0, L, nx);
 [X, Y] = meshgrid(x, x);
 
-n = 1;
+n = 3;
 N = 2*n + 1;
-amp = rand(N, N)/(N^2);
-phase = L*rand(N, N);
+amp = ones(N, N)/(N^2);
+phase = L*zeros(N, N);
 
-Nparticles = 10;
+Nparticles = 25;
 x0 = zeros(1, 2, Nparticles);
 k0 = zeros(1, 2, Nparticles);
 for i=1:Nparticles
@@ -18,18 +18,20 @@ for i=1:Nparticles
    x0(1, :, i) = L*(rand(1, 2)) - L/2;
 end
 
+psi = reshape(streamfunction(X(:), Y(:), amp, phase, n), size(X));
+
 f = 3;
 Cg = 1;
 gH = Cg^2;
 U = Velocity(X(:), Y(:), amp, phase, n);
-speed = vecnorm(U, 2, 2);
+speed2 = U(:,1).^2 + V(:,2).^2;
 dx = L/nx;
-U0 = max(speed(:));
+U0 = sqrt(max(speed2));
 dt = 0.1*dx/max(Cg, U0);
 
-Fr = U0/sqrt(gH)
+Fr = U0/Cg
 
-Tend = 10/(f*Fr^2);
+Tend = 100/(f*Fr^2);
 
 Omega_0 = omega(k0, f, gH) + dot(Velocity(x0(1, 1, :), x0(1, 2, :), amp, phase, n), k0(1, :, :), 2);
 
@@ -48,9 +50,11 @@ for i=2:Nsteps
     solver_t(i) = (i-1)*dt;
 end
 
+
 w = squeeze(omega(solver_k, f, gH));
 Omega_abs = omega(solver_k, f, gH) + dot(Velocity(solver_x(:,1,:), solver_x(:,2,:), amp, phase, n), solver_k, 2);
 solver_error = squeeze((Omega_abs - Omega_0) ./ Omega_0);
+%solver_error = squeeze(Omega_abs);
 plot(solver_t * (f*Fr^2), solver_error, 'k');
 title("Error in absolute frequency");
 xlabel("t (1/(f*Fr^2)");
@@ -80,49 +84,53 @@ function [x, k] = phi2(x0, k0, dt, amp, phase, n)
     yy = x0(:,2,:);
     kk = k0(:,1,:);
     ll = k0(:,2,:);
-    x = xx;
-    y = yy;
-    k = kk;
-    l = ll;
+    update_x = 0;
+    update_y = 0;
+    update_k = 0;
+    update_l = 0;
     for K=-n:n
         for L=-n:n
             if K == 0 && L == 0
                 continue
             end
             c = K*xx + L*yy;
-            a = L*kk + K*ll;
+            a = L*kk - K*ll;
             
-            x = x - dt * L * real(1i * amp(K+n+1, L+n+1)*exp(1i*(c + phase(K+n+1,L+n+1))));
-            y = y + dt * K * real(1i * amp(K+n+1, L+n+1)*exp(1i*(c + phase(K+n+1,L+n+1))));
-            k = k - dt * K * real(-1 * amp(K+n+1, L+n+1)*exp(1i*(c + phase(K+n+1,L+n+1))) .* a);
-            l = l - dt * L * real(-1 * amp(K+n+1, L+n+1)*exp(1i*(c + phase(K+n+1,L+n+1))) .* a);
+            update_x = update_x - dt * L * amp(K+n+1, L+n+1) * -sin(c + phase(K+n+1,L+n+1));
+            update_y = update_y + dt * K * amp(K+n+1, L+n+1) * -sin(c + phase(K+n+1,L+n+1));
+            update_k = update_k - dt * K * amp(K+n+1, L+n+1) * -cos(c + phase(K+n+1,L+n+1)) .* a;
+            update_l = update_l - dt * L * amp(K+n+1, L+n+1) * -cos(c + phase(K+n+1,L+n+1)) .* a;
         end
     end
-    x = [x y];
-    k = [k l];
+    x = x0 + [update_x update_y];
+    k = k0 + [update_k update_l];
 end
 
-function psi=streamfunction(arg, amp, phase, n)
-    psi = 0 * arg;
+function psi=streamfunction(X, Y, amp, phase, n)
+    psi = 0 * X;
     for k=-n:n
         for l=-n:n
             if k == 0 && l == 0
                 continue
             end
-            psi = psi + amp(k+n+1, l+n+1)*real(exp(1i*(arg + phase(k+n+1,l+n+1))));
+            psi = psi + amp(k+n+1, l+n+1)*cos(k*X + l*Y + phase(k+n+1,l+n+1));
         end
     end
 end
 
 function vel = Velocity(x, y, amp, phase, n)
-    vel = [0 * x, 0 * y];
+    u = 0 * x;
+    v = 0 * y;
     for k=-n:n
         for l=-n:n
             if k == 0 && l == 0
                 continue
             end
-            vel = vel + amp(k+n+1, l+n+1)*real(exp(1i*(k*x + l*y + phase(k+n+1,l+n+1))) .* [-1i*l, 1i*k]);
+            u = u + -l * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
+            v = v +  k * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
         end
     end
+    
+    vel = [u v];
 end
 

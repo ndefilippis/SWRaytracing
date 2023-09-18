@@ -137,7 +137,7 @@ for step=1:Nsteps
    qk = Ef .* qk;% At some point, try to get hyperdiffusion working here instead/also
    
    % Do wavepacket advection
-   if(t > packet_delay)
+   if(Npackets > 0 && t > packet_delay)
        background_flow1 = grid_U(prev_qk, K_d2, K2, kx_, ky_);
        background_flow2 = grid_U(qk, K_d2, K2, kx_, ky_);
        ray_ode = generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, dt, dx);
@@ -150,7 +150,7 @@ for step=1:Nsteps
        [packet_x, packet_k] = ode_y2xk(Npackets, solver_y(end,:)');
    end
    
-   if(t > packet_delay && mod(step - packet_step_start + 1, packet_steps_per_save) == 0)
+   if(Npackets > 0 && t > packet_delay && mod(step - packet_step_start + 1, packet_steps_per_save) == 0)
       packet_frame = packet_frame + 1; 
       %x_save(:, :, packet_frame) = mod(packet_x + L/2, L) - L/2;
       %k_save(:, :, packet_frame) = packet_k;
