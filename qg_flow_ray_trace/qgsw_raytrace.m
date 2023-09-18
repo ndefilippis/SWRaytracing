@@ -22,6 +22,8 @@ K2 = kx_.^2 + ky_.^2;
 % Simulation parameters
 rng(146);
 beta = 0;
+r_drag = 0.1;
+surface_forces = inertial_ring(0.1, K2, f, Cg);
 K_d2 = f/Cg;
 T_days = T_Fr_days/f;
 CFL_fraction = 0.05;
@@ -30,11 +32,11 @@ CFL_fraction = 0.05;
 steps_per_save = 50; % Has to be bigger than 3 or it wont save the initial AB steps
 packet_delay = packet_delay_days / f;
 packet_steps_per_save = 5;
-pv_filename = './data/pv';
-pv_time_filename = './data/pv_time';
-packet_x_filename = './data/packet_x';
-packet_k_filename = './data/packet_k';
-packet_time_filename = './data/packet_time';
+pv_filename = 'data/pv';
+pv_time_filename = 'data/pv_time';
+packet_x_filename = 'data/packet_x';
+packet_k_filename = 'data/packet_k';
+packet_time_filename = 'data/packet_time';
 
 % Create log levels
 LOG_ERROR = 0;
@@ -119,13 +121,13 @@ log_message("Simulation progress:  0.00%%", LOG_VERBOSE)
 for step=1:Nsteps
    prev_qk = qk;
    if(step == 1)
-       Qn = update(qk, K2, K_d2, beta, kx_, ky_);
+       Qn = update(qk, K2, K_d2, beta, r_drag, surface_forces, kx_, ky_);
        dq = dt*Qn;
    elseif(step == 2)
-       Qn = update(qk, K2, K_d2, beta, kx_, ky_);
+       Qn = update(qk, K2, K_d2, beta, r_drag, surface_forces, kx_, ky_);
        dq = dt/2*(3*Qn - Qn_minus(:,:,1));
    else
-       Qn = update(qk, K2, K_d2, beta, kx_, ky_);
+       Qn = update(qk, K2, K_d2, beta, r_drag, surface_forces, kx_, ky_);
        dq = dt/12*(23*Qn - 16*Qn_minus(:,:,1) + 5*Qn_minus(:,:,2));
    end
    t = t + dt;
@@ -211,6 +213,12 @@ function q=initial_q(X, Y, a_g, K_d2)
     q = a_g/sqrt(max(speed2(:))) * q;
 end
 
+function forces=inertial_ring(force_strength, K2, f, Cg)
+    omega = sqrt(f^2 + Cg^2.*K2);
+    forces = zeros(size(K2));
+    forces(0.9*f < omega & omega < 1.1*f) = force_strength;
+end
+
 function Ef=filter(kx_, ky_, dx)
     Ef = ones(size(kx_));
     kstar = sqrt((kx_*dx).^2 + (ky_*dx).^2);
@@ -259,7 +267,7 @@ function rayode=generate_raytracing_ode(background_flow1, background_flow2, Npac
     rayode = @odefun;
 end
 
-function dq=update(qk, K2, K_d2, beta, kx_, ky_)
+function dq=update(qk, K2, K_d2, beta, r_drag, surface_forces, kx_, ky_)
    psik = -qk./(K_d2 + K2);
    psikx = 1i*kx_.*psik;
    psiky = 1i*ky_.*psik;
@@ -274,5 +282,5 @@ function dq=update(qk, K2, K_d2, beta, kx_, ky_)
    J = psix.*qy - psiy .* qx;
    %nu = 10;
    %hyperdiffusion = -nu*(1i*kx_).^2.*(1i*ky_).^2.*((1i*kx_).^6 + (1i*ky_).^6);
-   dq = g2k(J) - beta*psikx;
+   dq = g2k(J) - beta*psikx + r_drag * K2 + surface_forces;
 end
