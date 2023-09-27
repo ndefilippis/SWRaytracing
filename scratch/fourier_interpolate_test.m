@@ -5,12 +5,14 @@ nx = 64;
 x = linspace(0, L, nx);
 [X, Y] = meshgrid(x, x);
 
+rng(421)
+
 n = 3;
 N = 2*n + 1;
-amp = ones(N, N)/(N^2);
+amp = 0.1*ones(N, N)/(N^2);
 phase = L*zeros(N, N);
 
-Nparticles = 25;
+Nparticles = 2;
 x0 = zeros(1, 2, Nparticles);
 k0 = zeros(1, 2, Nparticles);
 for i=1:Nparticles
@@ -24,14 +26,14 @@ f = 3;
 Cg = 1;
 gH = Cg^2;
 U = Velocity(X(:), Y(:), amp, phase, n);
-speed2 = U(:,1).^2 + V(:,2).^2;
+speed2 = U(:,1).^2 + U(:,2).^2;
 dx = L/nx;
 U0 = sqrt(max(speed2));
 dt = 0.1*dx/max(Cg, U0);
 
 Fr = U0/Cg
 
-Tend = 100/(f*Fr^2);
+Tend = 2/(f*Fr^2);
 
 Omega_0 = omega(k0, f, gH) + dot(Velocity(x0(1, 1, :), x0(1, 2, :), amp, phase, n), k0(1, :, :), 2);
 
@@ -55,7 +57,9 @@ w = squeeze(omega(solver_k, f, gH));
 Omega_abs = omega(solver_k, f, gH) + dot(Velocity(solver_x(:,1,:), solver_x(:,2,:), amp, phase, n), solver_k, 2);
 solver_error = squeeze((Omega_abs - Omega_0) ./ Omega_0);
 %solver_error = squeeze(Omega_abs);
-plot(solver_t * (f*Fr^2), solver_error, 'k');
+plot(solver_t * (f*Fr^2), w, 'k');
+hold on
+plot(solver_t * (f*Fr^2), squeeze(Omega_abs), 'r');
 title("Error in absolute frequency");
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
