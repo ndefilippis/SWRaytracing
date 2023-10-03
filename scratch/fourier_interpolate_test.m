@@ -5,14 +5,14 @@ nx = 64;
 x = linspace(0, L, nx);
 [X, Y] = meshgrid(x, x);
 
-rng(421)
+rng(422)
 
-n = 3;
+n = 31;
 N = 2*n + 1;
-amp = 0.1*ones(N, N)/(N^2);
+amp = 0.05*ones(N, N)/N^2;
 phase = L*zeros(N, N);
 
-Nparticles = 2;
+Nparticles = 5;
 x0 = zeros(1, 2, Nparticles);
 k0 = zeros(1, 2, Nparticles);
 for i=1:Nparticles
@@ -33,7 +33,7 @@ dt = 0.1*dx/max(Cg, U0);
 
 Fr = U0/Cg
 
-Tend = 2/(f*Fr^2);
+Tend = 30/(f*Fr^2);
 
 Omega_0 = omega(k0, f, gH) + dot(Velocity(x0(1, 1, :), x0(1, 2, :), amp, phase, n), k0(1, :, :), 2);
 
@@ -56,10 +56,7 @@ end
 w = squeeze(omega(solver_k, f, gH));
 Omega_abs = omega(solver_k, f, gH) + dot(Velocity(solver_x(:,1,:), solver_x(:,2,:), amp, phase, n), solver_k, 2);
 solver_error = squeeze((Omega_abs - Omega_0) ./ Omega_0);
-%solver_error = squeeze(Omega_abs);
-plot(solver_t * (f*Fr^2), w, 'k');
-hold on
-plot(solver_t * (f*Fr^2), squeeze(Omega_abs), 'r');
+plot(solver_t * (f*Fr^2), solver_error, 'k');
 title("Error in absolute frequency");
 xlabel("t (1/(f*Fr^2)");
 ylabel("\Delta\omega_a/\omega_0");
@@ -94,9 +91,6 @@ function [x, k] = phi2(x0, k0, dt, amp, phase, n)
     update_l = 0;
     for K=-n:n
         for L=-n:n
-            if K == 0 && L == 0
-                continue
-            end
             c = K*xx + L*yy;
             a = L*kk - K*ll;
             
@@ -114,9 +108,6 @@ function psi=streamfunction(X, Y, amp, phase, n)
     psi = 0 * X;
     for k=-n:n
         for l=-n:n
-            if k == 0 && l == 0
-                continue
-            end
             psi = psi + amp(k+n+1, l+n+1)*cos(k*X + l*Y + phase(k+n+1,l+n+1));
         end
     end
@@ -127,11 +118,8 @@ function vel = Velocity(x, y, amp, phase, n)
     v = 0 * y;
     for k=-n:n
         for l=-n:n
-            if k == 0 && l == 0
-                continue
-            end
-            u = u + -l * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
-            v = v +  k * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
+            u = u + l * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
+            v = v + -k * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
         end
     end
     
