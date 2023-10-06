@@ -10,24 +10,30 @@ function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, pack
 % Cg: Group velocity of the waves (equal to sqrt(gH))
 
 % Set up domain
-L = 2*pi;
+L = 8*pi;
 dx = L/nx;
 x = linspace(-L/2, L/2, nx);
 [X, Y] = meshgrid(x, x);
 
 kmax = nx/2-1;
 [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
+kx_ = kx_ * (2*pi/L);
+ky_ = ky_ * (2*pi/L);
 K2 = kx_.^2 + ky_.^2;
 
 % Simulation parameters
-rng(146);
+rng(5);
 beta = 0;
-K_d2 = f/Cg;
+K_d2 = 0.1*f/Cg;
+U = 0.1;
 T_days = T_Fr_days/f;
-CFL_fraction = 0.05;
+CFL_fraction = 0.2;
+alpha = 4;
+r = 0.1;
+nutune = 0.01;
 
 % Output parameters
-steps_per_save = 50;
+steps_per_save = 25;
 packet_delay = packet_delay_days / f;
 packet_steps_per_save = 5;
 pv_filename = 'data/pv';
@@ -46,8 +52,8 @@ log_message = create_logger(LOG_VERBOSE);
 % Set up initial conditions
 t = 0;
 
-q1 = initial_top_q(X, Y, U_g, K_d2);
-q2 = 0*X;
+q1 = 0.1*initial_q(X, Y, U_g, K_d2);
+q2 = 0.1*initial_q(X, Y, U_g, K_d2);
 q = cat(3, q1, q2);
 qk = apply_3d(q, @g2k);
 
@@ -63,11 +69,12 @@ end
 flow = grid_U(qk, K_d2, K2, kx_, ky_);
 speed2 = flow.u.^2 + flow.v.^2;
 U0 = sqrt(max(speed2(:)));
-Fr = U0/Cg;
+Fr = max(U, U0)/Cg;
 
 T = T_days / Fr^2;
 
-dt = CFL_fraction*dx/U0;
+dt = CFL_fraction*dx/max(U0, U);
+nu = nutune*dx/(dt*kmax^(2*alpha));
 
 Nsteps = ceil(T/dt);
 packet_step_start = ceil(packet_delay / dt);
@@ -112,28 +119,31 @@ AB_order = 3;
 Qn_minus = zeros(2*kmax+1, kmax+1, 2, AB_order - 1);
 
 tic
-Ef = filter(kx_, ky_, dx);
-nu = 0.001;
-alpha = 4;
-r = 0.001;
-
 % Initialize Adams-Bashforth inital steps using:
 % 1. Forward Euler
 % 2. Second order AB
 log_message("Simulation progress:  0.00%%", LOG_VERBOSE)
 
 F = K_d2/2;
-B1 = cat(3, -F-K2, -F + 0*K2);
-B2 = cat(3, -F + 0*K2, -F-K2);
-B = cat(4, B1, B2);
+B1 = cat(3, -F - K2, -F + 0*K2);
+B2 = cat(3, -F + 0*K2, -F - K2);
+detB = (K2.*(K2 + 2*F));
+detB(K2 == 0) = Inf;
+B = cat(4, B1, B2) ./ detB;
 
-int_factor = ((nu * K2.^alpha + r).*K2 - 1i*kx_*beta) .* B;
-expL = zeros(size(int_factor));
+int_factor = B.*((nu * K2.^(alpha) + r).*K2 - 1i*kx_*beta);
+expLdt = zeros(size(int_factor));
+expL2dt = zeros(size(int_factor));
+tic
 for i=1:size(int_factor, 1)
     for j=1:size(int_factor, 2)
-        expL(i, j, :, :) = expm(squeeze(int_factor(i, j, :, :)));
+        mean_flow_term = 1i*kx_(i,j)*U*([-1, 0; 0, 1] + 2*F/detB(i,j)*[F + K2(i, j), F; -F, -F-K2(i, j)]);
+        int_factor22 = squeeze(int_factor(i, j, :, :));
+        expLdt(i, j, :, :) = expm(dt*(int_factor22 + mean_flow_term));
+        expL2dt(i, j, :, :) = expm(2*dt*(int_factor22 + mean_flow_term));
     end
 end
+toc
 
 for step=1:Nsteps
    prev_qk = qk;
@@ -142,15 +152,15 @@ for step=1:Nsteps
        dq = dt*Qn;
    elseif(step == 2)
        Qn = update(qk, B, kx_, ky_);
-       dq = dt/2*(3*Qn - exp(dt)*mmult3(expL, Qn_minus(:,:,:,1)));
+       dq = dt/2*(3*Qn - mmult3(expLdt, squeeze(Qn_minus(:,:,:,1))));
    else
        Qn = update(qk, B, kx_, ky_);
-       dq = dt/12*(23*Qn - 16*exp(dt)*mmult3(expL, Qn_minus(:,:,:,1)) + 5*exp(2*dt)*mmult3(expL, Qn_minus(:,:,:,2)));
+       dq = dt/12*(23*Qn - 16*mmult3(expLdt, squeeze(Qn_minus(:,:,:,1))) + 5*mmult3(expL2dt, squeeze(Qn_minus(:,:,:,2))));
    end
    t = t + dt;
    Qn_minus(:,:,:,2) = Qn_minus(:,:,:,1);
    Qn_minus(:,:,:,1) = Qn;
-   qk = mmult3(expL, qk + dq)*exp(dt);
+   qk = mmult3(expLdt, qk + dq);
    % qk = Ef .* qk;% At some point, try to get hyperdiffusion working here instead/also
    
    % Do wavepacket advection
@@ -182,14 +192,24 @@ for step=1:Nsteps
    
    if(mod(step, steps_per_save) == 0)
        frame = frame + 1;
+       c_max = max(abs(q), [], [1,2]);
        q = apply_3d(qk, @k2g);
+       subplot 211
        contourf(X, Y, q(:,:,1), 18, 'LineColor','none');
+       axis image
+       colorbar()
+       caxis([-c_max(1), c_max(1)]);
+       subplot 212
+       contourf(X, Y, q(:,:,2), 18, 'LineColor','none');
+       axis image
+       colorbar()
+       caxis([-c_max(2), c_max(2)]);
        colormap(redblue);
        pause(1/30);
        %q_save(:,:,frame) = q;
        %t_background_save(frame) = t;
-       write_field(q, pv_filename, frame);
-       write_field(t, pv_time_filename, frame);
+       %write_field(q, pv_filename, frame);
+       %write_field(t, pv_time_filename, frame);
    end
    if mod(step, 51) == 0
         log_message("% 6.2f%%\n", LOG_VERBOSE, step/Nsteps*100)
@@ -209,11 +229,11 @@ function log_message = create_logger(max_log_level)
     log_message = @log_func;
 end
 
-function q=initial_top_q(X, Y, a_g, K_d2)
+function q=initial_q(X, Y, a_g, K_d2)
     % Inital background PV
     % set as a ring of intermediate wavenumbers
-    k_min = 5;
-    k_max = 8;
+    k_min = 1;
+    k_max = 40;
     q = 0*X;
     U = 0*X;
     V = 0*X;
@@ -234,16 +254,6 @@ function q=initial_top_q(X, Y, a_g, K_d2)
     q = a_g/sqrt(max(speed2(:))) * q;
 end
 
-function Ef=filter(kx_, ky_, dx)
-    Ef = ones(size(kx_));
-    kstar = sqrt((kx_*dx).^2 + (ky_*dx).^2);
-    
-    kc = 0.75*pi;
-    const = log(1e-15)/(0.25*pi)^4;
-    result = exp(const * (kstar - kc).^4);
-    Ef(kstar >= kc) = result(kstar >= kc);
-end
-
 % Helper functions to turn x-k packet variables to a single column variable
 function [x, k] = ode_y2xk(Npackets, y)
     x = [y(0*Npackets+1:1*Npackets), y(1*Npackets+1:2*Npackets)];
@@ -258,18 +268,6 @@ function y = ode_xk2y(Npackets, x, k)
     y(3*Npackets + 1:4*Npackets) = k(:, 2);
 end
 
-function S = sparsity(Npackets)
-    S = zeros(4*Npackets);
-    for i=1:Npackets
-       for field=0:3
-           for field2=0:3
-            S(i + Npackets*field, i + Npackets*field2) = 1;
-            S(i + Npackets*field2, i + field*Npackets) = 1;
-           end
-       end
-    end
-end
-
 function rayode=generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, tmax, h)
     function dydt=odefun(t, y)
        [x, k] = ode_y2xk(Npackets, y);
@@ -282,7 +280,7 @@ function rayode=generate_raytracing_ode(background_flow1, background_flow2, Npac
     rayode = @odefun;
 end
 
-function dq=update(qk, B, kx_, ky_)
+function dq =update(qk, B, kx_, ky_)
    psik = mmult3(B, qk);
    psikx = 1i*kx_.*psik;
    psiky = 1i*ky_.*psik;
@@ -295,15 +293,7 @@ function dq=update(qk, B, kx_, ky_)
    qy = apply_3d(qky, @k2g);
    
    J = psix.*qy - psiy .* qx;
-   %nu = 10;
-   %hyperdiffusion = -nu*(1i*kx_).^2.*(1i*ky_).^2.*((1i*kx_).^6 + (1i*ky_).^6);
    dq = apply_3d(J, @g2k);
-end
-
-function f=B(v, F, K_2)
-   f1 = ((-F - K_2) .* v(:,:,1) + -F .* v(:,:,2)) ./ (K_2 .* (K_2 + 2*F));
-   f2 = ((-F) .* v(:,:,1) + (-F-K_2) .* v(:,:,2)) ./ (K_2 .* (K_2 + 2*F));
-   f = cat(3, f1, f2);
 end
 
 function y=apply_3d(x, f)
