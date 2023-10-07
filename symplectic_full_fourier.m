@@ -27,8 +27,6 @@ for i=1:Nparticles
    x(1, :, i) = L*(rand(1, 2)) - L/2;
 end
 
-Omega_0 = omega(k, f, gH) + dot(scheme.U(x, 0), k, 2);
-
 U = scheme.U([XX(:), YY(:)]);
 speed = vecnorm(U, 2, 2);
 dx = L/nx;
@@ -38,6 +36,9 @@ Fr = U0/Cg
 dt = 0.1*dx/max(Cg, U0);
 
 Tend = 10/(f*Fr^2);
+
+
+Omega_0 = omega(k, f, gH) + dot(scheme.U(x, 0), k, 2);
 
 tic
 [solver_x, solver_k, solver_t] = ode_symplectic(x, k, dt, Tend, f, gH, scheme);

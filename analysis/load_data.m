@@ -6,8 +6,9 @@ Ug_array = [];
 legend_objs = [];
 figure();
 param_index = 1;
-for i=1:num_runs
-    directory = "job-36976465/run-" + num2str(i-1) + "/";
+job_number = "job-37011720";
+for i=16:16
+    directory = job_number + "/run-" + num2str(i) + "/";
     
     [fid,status]=fopen(directory + "run.log");
     if(status)
@@ -30,8 +31,29 @@ for i=1:num_runs
     x_save = read_field(directory + "packet_x", Npackets, 2, 1, 1:packet_frame);
     k_save = read_field(directory + "packet_k", Npackets, 2, 1, 1:packet_frame);
     omega = squeeze(sqrt(f^2 + Cg^2.*dot(k_save, k_save, 2)));
-    w = sort(omega(:,end));
-    energy = w .* sum((w'-1 < w) .* (w < w'+1))';
+    
+    offset = 500;
+    times = [1, 1000, 30000, length(t_packet_save)-offset];
+    style = ['k', 'r', 'b', 'm'];
+    bins = 300;
+    edges = linspace(0, max(omega, [], "all"), bins);
+    center = (edges(2:end) + edges(1:end-1))/2;
+    
+    scatter(omega(1,1)/f, omega(1, 1)*length(omega(:,1))*2*offset, 500, 'k.');
+    hold on
+    for t_index=2:length(times)
+        w = omega(:,times(t_index)-offset:1:times(t_index)+offset);
+        w = sort(w(:));
+        distribution = histcounts(w, edges);
+        %energy = w .* sum((w'-0.5 < w) .* (w < w'+0.5))';
+        energy = center .* distribution;
+        p = loglog(center/f, energy, style(t_index), "LineWidth", 2);
+        %p = loglog(w, energy, style(t_index), "LineWidth", 2);
+    end
+    set(gca,'xscale','log')
+    set(gca,'yscale','log')
+    
+    
     %if(f(1) ~= 1) 
     %    continue;  
     %end
@@ -49,14 +71,23 @@ for i=1:num_runs
         param_index = param_index + 1;
     end
     hold on
+    %p = plot(t_packet_save * f, mean_omega);
+    
+    title_string = "Energy versus omega (f=" + f + ",Cg=" + Cg + ",Ug=" + Ug + ",\omega_0/f=" + round(omega(1,1)/f) + ")";
+    title(title_string);
+    xlabel("\omega/f")
+    ylabel("e(\omega)");
+    %title("Energy distributions (f = " + f(1) + ")");
+    %xlabel("\omega (f)");
+    %ylabel("e(\omega)");
+    %legend(legend_objs, "Ug = " + Ug_array + ", Cg = " + Cg_array + ", Fr = " + Ug_array ./ Cg_array);
+    legend("ft = " + ((t_packet_save(times) - t_packet_save(1))*f));
+    hold off
+    
+    filename = job_number + "_" + replace(replace(title_string, "\omega_0/f", "w0"), " ", "_") + ".png";
+    saveas(gcf,filename)
 end
-title("Packet-averaged wavenumber versus time (f = " + f_array(1) + ")");
-xlabel("t (1/f)")
-ylabel("\omega (f)");
-%title("Energy distributions (f = " + f(1) + ")");
-%xlabel("\omega (f)");
-%ylabel("e(\omega)");
-legend(legend_objs, "Ug = " + Ug_array + ", Cg = " + Cg_array + ", Fr = " + Ug_array ./ Cg_array);
+
 
 function [color, line_style]=assign_style(f, Cg, Ug)
     color = "k";

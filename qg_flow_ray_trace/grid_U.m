@@ -8,11 +8,11 @@ function background_flow = grid_U(qk, K_d2, K2, kx_, ky_)
     vkx = 1i*kx_.*vk;
     vky = 1i*ky_.*vk;
     
-    background_flow.u = k2g(uk);
-    background_flow.v = k2g(vk);
+    background_flow.u = apply_3d(uk, @k2g);
+    background_flow.v = apply_3d(vk, @k2g);
     
-    background_flow.ux = k2g(ukx);
-    background_flow.uy = k2g(uky);
-    background_flow.vx = k2g(vkx);
-    background_flow.vy = k2g(vky);
+    background_flow.ux = apply_3d(ukx, @k2g);
+    background_flow.uy = apply_3d(uky, @k2g);
+    background_flow.vx = apply_3d(vkx, @k2g);
+    background_flow.vy = apply_3d(vky, @k2g);
 end

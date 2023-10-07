@@ -1,5 +1,5 @@
-nx = 128;
-Npackets = 40;
+nx = 256;
+Npackets = 0;
 f = 3;
 Cg = 1;
 
@@ -14,19 +14,23 @@ K2 = kx_.^2 + ky_.^2;
 K_d2 = f/Cg;
 
 % Plotting options
-t_background_save = read_field('pv_time');
+t_background_save = read_field('data/pv_time');
 frame = size(t_background_save, 2);
-q_save = read_field('pv', nx, nx, 1, 1:frame);
+q_save = read_field('data/pv', nx, nx, 1, 1:frame);
 
-t_packet_save = read_field('packet_time');
+t_packet_save = read_field('data/packet_time');
 packet_frame = size(t_packet_save, 2);
-x_save = read_field('packet_x', Npackets, 2, 1, 1:packet_frame);
-k_save = read_field('packet_k', Npackets, 2, 1, 1:packet_frame);
+x_save = read_field('data/packet_x', Npackets, 2, 1, 1:packet_frame);
+k_save = read_field('data/packet_k', Npackets, 2, 1, 1:packet_frame);
 
 T = max(t_packet_save);
 packet_steps_per_mean_flow_step = round((t_background_save(2) - t_background_save(1)) / (t_packet_save(2) - t_packet_save(1)));
 packet_frames = find(t_background_save >= t_packet_save(1));
-packet_frame_start = packet_frames(1);
+if(length(packet_frames) == 0)
+    packet_frame_start = 0;
+else
+    packet_frame_start = packet_frames(1);
+end
 
 do_write_video = false;
 image_path = '../images/';
@@ -66,7 +70,7 @@ for i=1:frame
     background_flow = grid_U(g2k(q_save(:,:,i)), K_d2, K2, kx_, ky_);
     speed2 = background_flow.u.^2 + background_flow.v.^2;
     Umax = max(speed2, [], 'all');
-    if(t_background_save(i) >= t_packet_save(1))
+    if(Npackets > 0 && t_background_save(i) >= t_packet_save(1))
         for j = 1:packet_steps_per_mean_flow_step
             alpha = j / packet_steps_per_mean_flow_step;
             pv_data =  alpha * q_save(:,:,i) + (1 - alpha) * q_save(:,:,i - 1);
