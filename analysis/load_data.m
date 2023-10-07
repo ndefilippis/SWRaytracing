@@ -40,7 +40,7 @@ for i=1:num_runs
 
     mean_omega = mean(omega) / f;
     p = plot(t_packet_save * f, mean_omega);
-    %loglog(w/f, energy, color + line_style);
+    loglog(w/f, energy, color + line_style);
     if(true)
         Cg_array(param_index) = Cg;
         f_array(param_index) = f;
