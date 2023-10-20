@@ -5,16 +5,12 @@ nx = 128;
 x = linspace(0, L, nx);
 [X, Y] = ndgrid(x, x);
 
-rng(44)
+rng(43)
 
-n = 5;
+n = 1;
 N = 2*n + 1;
-amp = 0.5*rand(N, N)/N^2;
-%amp(end, end) = 0.1;
-%amp(end, 1) = 0.1;
-%phase = zeros(N, N);
-%phase(end, end) = pi;
-phase = 2*pi*rand(N, N);
+amp = 0.q*ones(N, N)/N^2;
+phase = 2*pi*zeros(N, N);
 
 Nparticles = 1;
 x0 = zeros(1, 2, Nparticles);
@@ -34,7 +30,7 @@ speed2 = U(:,1).^2 + U(:,2).^2;
 dx = L/nx;
 U0 = sqrt(mean(speed2));
 Umax = sqrt(max(speed2));
-dt = 0.01;
+dt = 0.02;
 
 Fr = Umax/Cg
 
@@ -100,6 +96,9 @@ function [x, k] = phi2(x0, k0, dt, amp, phase, n)
     update_l = 0;
     for K=-n:n
         for L=-n:n
+            if K == 0 && L == 0 
+                continue;
+            end
             c = K*xx + L*yy;
             a = L*kk - K*ll;
             
@@ -117,6 +116,9 @@ function psi=streamfunction(X, Y, amp, phase, n)
     psi = 0 * X;
     for k=-n:n
         for l=-n:n
+            if k == 0 && l == 0 
+                continue;
+            end
             psi = psi + amp(k+n+1, l+n+1)*cos(k*X + l*Y + phase(k+n+1,l+n+1));
         end
     end
@@ -127,6 +129,9 @@ function vel = Velocity(x, y, amp, phase, n)
     v = 0 * y;
     for k=-n:n
         for l=-n:n
+            if k == 0 && l == 0 
+                continue;
+            end
             u = u + -l * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
             v = v + k * amp(k+n+1, l+n+1) * -sin(k*x + l*y + phase(k+n+1,l+n+1));
         end

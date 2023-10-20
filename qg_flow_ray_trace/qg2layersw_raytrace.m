@@ -1,4 +1,4 @@
-function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, packet_delay_days, U_g, f, Cg)
+function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, packet_delay_Fr_days, U_g, f, Cg)
 % Input:
 % nx: resolution of QG flow
 % Npackets: number of packets to advect
@@ -13,7 +13,7 @@ function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, pack
 L = 8*pi;
 dx = L/nx;
 x = linspace(-L/2, L/2, nx);
-[X, Y] = meshgrid(x, x);
+[X, Y] = ndgrid(x, x);
 
 kmax = nx/2-1;
 [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
@@ -24,17 +24,18 @@ K2 = kx_.^2 + ky_.^2;
 % Simulation parameters
 rng(5);
 beta = 0;
-K_d2 = 0.1*f/Cg;
-U = 0.1;
-T_days = T_Fr_days/f;
-CFL_fraction = 0.2;
+K_d2 = f/Cg;
+shear_strength = 1;
+T_Fr = T_Fr_days/f;
+packet_delay_Fr = packet_delay_Fr_days/f;
+CFL_fraction = 0.25;
 alpha = 4;
-r = 0.1;
-nutune = 0.01;
+r = 1;
+nutune = 10;
 
 % Output parameters
-steps_per_save = 25;
-packet_delay = packet_delay_days / f;
+steps_per_save = 5;
+packet_delay_steps = packet_delay_Fr / f;
 packet_steps_per_save = 5;
 pv_filename = 'data/pv';
 pv_time_filename = 'data/pv_time';
@@ -52,8 +53,8 @@ log_message = create_logger(LOG_VERBOSE);
 % Set up initial conditions
 t = 0;
 
-q1 = 0.1*initial_q(X, Y, U_g, K_d2);
-q2 = 0.1*initial_q(X, Y, U_g, K_d2);
+q1 = initial_q(X, Y, U_g, K_d2);
+q2 = q1;
 q = cat(3, q1, q2);
 qk = apply_3d(q, @g2k);
 
@@ -66,26 +67,26 @@ for i=1:Npackets
 end
 
 % Compute time step and Froude number from inital PV flow
-flow = grid_U(qk, K_d2, K2, kx_, ky_);
+flow = grid_U(qk, K_d2, K2, kx_, ky_, shear_strength);
 speed2 = flow.u.^2 + flow.v.^2;
 U0 = sqrt(max(speed2(:)));
-Fr = max(U, U0)/Cg;
+Fr = mean(U0)/Cg;
 
-T = T_days / Fr^2;
+T = T_Fr / Fr^2;
 
-dt = CFL_fraction*dx/max(U0, U);
+dt = CFL_fraction*dx/U0;
 nu = nutune*dx/(dt*kmax^(2*alpha));
 
 Nsteps = ceil(T/dt);
-packet_step_start = ceil(packet_delay / dt);
+packet_step_start = ceil(packet_delay_steps / dt);
 
 % Write out parameters:
 log_message("Resolution: %dx%d\n", LOG_INFO, nx, nx);
 log_message("Number of packets: %d\n", LOG_INFO, Npackets);
 log_message("Initial wavenumber radius: %f\n", LOG_INFO, near_inertial_factor * f);
-log_message("Time step: %f\n", LOG_INFO, dt);
+log_message("Initial time step: %f\n", LOG_INFO, dt);
 log_message("Simulation time: %f\n", LOG_INFO, T);
-log_message("Spin-up time: %f\n", LOG_INFO, packet_delay);
+log_message("Spin-up time: %f\n", LOG_INFO, packet_delay_steps);
 log_message("Steps per save: %d\n", LOG_INFO, steps_per_save);
 log_message("Steps per packet save: %d\n", LOG_INFO, packet_steps_per_save);
 log_message("Coriolis parameter: %f\n", LOG_INFO, f);
@@ -125,27 +126,52 @@ tic
 log_message("Simulation progress:  0.00%%", LOG_VERBOSE)
 
 F = K_d2/2;
-B1 = cat(3, -F - K2, -F + 0*K2);
-B2 = cat(3, -F + 0*K2, -F - K2);
-detB = (K2.*(K2 + 2*F));
+B(1,1,:,:) = -F - K2;
+B(1,2,:,:) = -F;
+B(2,1,:,:) = -F;
+B(2,2,:,:) = -F - K2;
+detB(1,1,:,:) = (K2.*(K2 + 2*F));
 detB(K2 == 0) = Inf;
-B = cat(4, B1, B2) ./ detB;
+B = B ./ detB;
 
-int_factor = B.*((nu * K2.^(alpha) + r).*K2 - 1i*kx_*beta);
-expLdt = zeros(size(int_factor));
-expL2dt = zeros(size(int_factor));
-tic
-for i=1:size(int_factor, 1)
-    for j=1:size(int_factor, 2)
-        mean_flow_term = 1i*kx_(i,j)*U*([-1, 0; 0, 1] + 2*F/detB(i,j)*[F + K2(i, j), F; -F, -F-K2(i, j)]);
-        int_factor22 = squeeze(int_factor(i, j, :, :));
-        expLdt(i, j, :, :) = expm(dt*(int_factor22 + mean_flow_term));
-        expL2dt(i, j, :, :) = expm(2*dt*(int_factor22 + mean_flow_term));
-    end
-end
-toc
 
-for step=1:Nsteps
+
+diffusion_factor(1,1,:,:) = ((nu * K2.^(alpha) + r).*K2 - 1i*kx_*beta);
+diffusion_terms = B.*diffusion_factor;
+shear_factor(1,1,:,:) = 1i*kx_*shear_strength;
+mean_flow_terms = shear_factor.*pagemtimes([-1,0;0,1], (eye(2) + 2*F*B));
+factor_L = mean_flow_terms + diffusion_terms;
+
+[LV,LD] = pageeig(factor_L);
+LV1 = pageinv(LV);
+expLdt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+
+step = 0;
+while t <= T 
+   step = step + 1;
+   % Determine dt
+
+   flow = grid_U(qk, K_d2, K2, kx_, ky_, shear_strength);
+   speed2 = (flow.u.^2 + flow.v.^2);
+   U0 = sqrt(max(speed2(:)));
+   CFL_condition = 0.5*dx / max(U0);
+   if CFL_condition < dt || dt < CFL_condition/4
+        dt = CFL_fraction * dx / max(U0);
+        nu = nutune*dx/(dt*kmax^(2*alpha));
+        diffusion_factor(1,1,:,:) = ((nu * K2.^(alpha) + r).*K2 - 1i*kx_*beta);
+        diffusion_terms = B.*diffusion_factor;
+        shear_factor(1,1,:,:) = 1i*kx_*shear_strength;
+        mean_flow_terms = shear_factor.*pagemtimes([-1,0;0,1], (eye(2) + 2*F*B));
+        factor_L = mean_flow_terms + diffusion_terms;
+
+        [LV,LD] = pageeig(factor_L);
+        LV1 = pageinv(LV);
+        log_message("CFL condition not met, max|u|=%f, new dt=%f\n", LOG_VERBOSE, U0, dt);
+        expLdt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+        expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+   end
+
    prev_qk = qk;
    if(step == 1)
        Qn = update(qk, B, kx_, ky_);
@@ -164,10 +190,10 @@ for step=1:Nsteps
    % qk = Ef .* qk;% At some point, try to get hyperdiffusion working here instead/also
    
    % Do wavepacket advection
-   if(Npackets > 0 && t > packet_delay)
+   if(Npackets > 0 && t > packet_delay_steps)
        % Only use the top layer to advect packets
-       background_flow1 = grid_U(prev_qk(:,:,:,1), K_d2, K2, kx_, ky_);
-       background_flow2 = grid_U(qk(:,:,:,1), K_d2, K2, kx_, ky_);
+       background_flow1 = grid_U(prev_qk(:,:,:,1), K_d2, K2, kx_, ky_, shear_strength);
+       background_flow2 = grid_U(qk(:,:,:,1), K_d2, K2, kx_, ky_, shear_strength);
        ray_ode = generate_raytracing_ode(background_flow1, background_flow2, Npackets, f, Cg, dt, dx);
        y0 = ode_xk2y(Npackets, packet_x, packet_k);
        % opts = odeset('Jpattern', S);
@@ -178,7 +204,7 @@ for step=1:Nsteps
        [packet_x, packet_k] = ode_y2xk(Npackets, solver_y(end,:)');
    end
    
-   if(Npackets > 0 && t > packet_delay && mod(step - packet_step_start + 1, packet_steps_per_save) == 0)
+   if(Npackets > 0 && t > packet_delay_steps && mod(step - packet_step_start + 1, packet_steps_per_save) == 0)
       packet_frame = packet_frame + 1; 
       %x_save(:, :, packet_frame) = mod(packet_x + L/2, L) - L/2;
       %k_save(:, :, packet_frame) = packet_k;
@@ -194,22 +220,20 @@ for step=1:Nsteps
        frame = frame + 1;
        c_max = max(abs(q), [], [1,2]);
        q = apply_3d(qk, @k2g);
-       subplot 211
+       % subplot 211
        contourf(X, Y, q(:,:,1), 18, 'LineColor','none');
        axis image
        colorbar()
-       caxis([-c_max(1), c_max(1)]);
-       subplot 212
-       contourf(X, Y, q(:,:,2), 18, 'LineColor','none');
-       axis image
-       colorbar()
-       caxis([-c_max(2), c_max(2)]);
+       clim([-c_max(1), c_max(1)]);
+       % subplot 212
+       % contourf(X, Y, q(:,:,2), 18, 'LineColor','none');
+       % axis image
+       % colorbar()
+       % caxis([-c_max(2), c_max(2)]);
        colormap(redblue);
-       pause(1/30);
-       %q_save(:,:,frame) = q;
-       %t_background_save(frame) = t;
-       %write_field(q, pv_filename, frame);
-       %write_field(t, pv_time_filename, frame);
+       pause(1/60);
+       write_field(q, pv_filename, frame);
+       write_field(t, pv_time_filename, frame);
    end
    if mod(step, 51) == 0
         log_message("% 6.2f%%\n", LOG_VERBOSE, step/Nsteps*100)
@@ -232,8 +256,8 @@ end
 function q=initial_q(X, Y, a_g, K_d2)
     % Inital background PV
     % set as a ring of intermediate wavenumbers
-    k_min = 1;
-    k_max = 40;
+    k_min = 10;
+    k_max = 30;
     q = 0*X;
     U = 0*X;
     V = 0*X;
@@ -307,6 +331,11 @@ end
 function y=mmult3(A, x)
    y = zeros(size(x));
    for i=1:size(x,3)
-        y(:, :, i) = A(:,:,i,1) .* x(:,:,1) + A(:,:,i,2) .* x(:,:,2);
+        y(:, :, i) = squeeze(A(i,1,:,:)) .* x(:,:,1) + squeeze(A(i,2,:,:)) .* x(:,:,2);
    end
+end
+
+function B=diag_exp(A, t)
+    B(1,1,:,:) = exp(t * A(1,1,:,:));
+    B(2,2,:,:) = exp(t * A(2,2,:,:));
 end

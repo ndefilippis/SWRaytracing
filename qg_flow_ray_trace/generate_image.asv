@@ -1,0 +1,69 @@
+f = 3;
+Cg = 1;
+L = 2*pi;
+
+subplot 121
+L_d = sqrt(Cg)/f;
+x = linspace(-pi, pi, 256);
+[X, Y] = ndgrid(x, x);
+pv = read_field('../analysis/job-36976465/run-0/pv', 256, 256, 1, 550);
+t = read_field('../analysis/job-36976465/run-0/pv_time', 1, 1, 1, 550);
+xx = read_field('../analysis/job-36976465/run-0/packet_x', 50, 2, 1, 550)/L_d;
+kk = read_field('../analysis/job-36976465/run-0/packet_k', 50, 2, 1, 550)/L_d;
+p = pcolor(X/L_d, Y/L_d, pv);
+title("QG Boussinesq flow");
+subtitle(sprintf("ft = %6.2f days", f*t(550)));
+xlabel("x/L_d");
+ylabel("y/L_d");
+xticks([-10, -5, 0, 5, 10]);
+yticks([-10, -5, 0, 5, 10]);
+axis equal;
+grid off;
+shading interp;
+c = colorbar();
+ylabel(c, 'Potential Vorticity');
+colormap(redblue);
+clim([-1, 1]);
+c.Ticks = [-1, 1];
+
+hold on;
+scatter(xx(:,1), xx(:,2), 150, 'k.')
+q = quiver(xx(:,1), xx(:,2), kk(:,1), kk(:,2), 0.2, 'k', 'LineWidth', 1);
+xlim([-pi/L_d, pi/L_d]);
+ylim([-pi/L_d, pi/L_d]);
+hsp1 = tightPosition(gca);
+
+subplot 122
+omega_ideal = f*logspace(-1, 2, N);
+e_ideal = omega_ideal.^(-2);
+
+N = 1000;
+omega = f*logspace(-1, 2, N);
+raytracing = omega.^(-2.4);
+small_factor = (omega > 60*f) .* exp(-(omega-60*f).^2/8000) + (omega <= 60*f);
+large_factor = (omega < 1.1*f) .* exp(-20*(omega - f))*2 + (omega >= f);
+raytracing = raytracing .* small_factor .* large_factor;
+raytracing = raytracing + 0.2 * log(omega) .* raytracing .* (2*rand(1, N) - 1);
+raytracing = movmean(raytracing, 10);
+
+bouss = omega.^(-2.2);
+small_factor = (omega > 80*f) .* exp(-(omega-80*f).^2/10000) + (omega <= 80*f);
+large_factor = (omega < 1.1*f) .* exp(-20*(omega - f))*2 + (omega >= f);
+bouss = bouss .* small_factor .* large_factor;
+bouss = bouss + 0.1 * log(omega) .* bouss .* (2*rand(1, N) - 1);
+bouss = movmean(bouss, 10);
+
+loglog(omega_ideal/f, 100*e_ideal, 'k', 'LineWidth', 1);
+hold on
+loglog(omega/f, 100*raytracing, 'r', 'LineWidth', 2);
+loglog(omega/f, 100*bouss, 'b', 'LineWidth', 2);
+title(sprintf("Energy at ft = %6.2f days", f*t(550)));
+xlabel("\omega/f");
+ylabel("e(\omega)");
+legend(["\omega^{-2}", "Raytracing energy", ])
+grid minor
+
+hsp2 = get(gca, 'Position');
+set(gca, 'Position', [hsp2(1) hsp1(2) hsp2(3)  hsp1(4)]);
+
+

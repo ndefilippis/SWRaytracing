@@ -1,11 +1,12 @@
-nx = 256;
+nx = 128;
 Npackets = 0;
 f = 3;
 Cg = 1;
+shear_strength = 0.4;
 
 L = 2*pi;
 x = linspace(-L/2, L/2, nx);
-[X, Y] = meshgrid(x, x);
+[X, Y] = ndgrid(x, x);
 
 kmax = nx/2-1;
 [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
@@ -57,7 +58,7 @@ hold off
 
 axis image
 colormap(redblue)
-caxis([-q_max, q_max])
+clim([-q_max, q_max])
 c = colorbar();
 c.Label.String = "PV";
 xlabel('X');
@@ -67,7 +68,7 @@ title(title_text_array);
 
 open(v);
 for i=1:frame
-    background_flow = grid_U(g2k(q_save(:,:,i)), K_d2, K2, kx_, ky_);
+    background_flow = grid_U(g2k(q_save(:,:,i)), K_d2, K2, kx_, ky_, shear_strength);
     speed2 = background_flow.u.^2 + background_flow.v.^2;
     Umax = max(speed2, [], 'all');
     if(Npackets > 0 && t_background_save(i) >= t_packet_save(1))
