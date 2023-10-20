@@ -13,7 +13,7 @@ function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, pack
 L = 8*pi;
 dx = L/nx;
 x = linspace(-L/2, L/2, nx);
-[X, Y] = meshgrid(x, x);
+[X, Y] = ndgrid(x, x);
 
 kmax = nx/2-1;
 [kx_,ky_] = ndgrid(-kmax:kmax,0:kmax);
@@ -24,16 +24,16 @@ K2 = kx_.^2 + ky_.^2;
 % Simulation parameters
 rng(5);
 beta = 0;
-K_d2 = 0.1*f/Cg;
-U = 0.1;
+K_d2 = f/Cg;
+U = 0.3;
 T_days = T_Fr_days/f;
-CFL_fraction = 0.2;
+CFL_fraction = 0.1;
 alpha = 4;
-r = 0.1;
-nutune = 0.01;
+r = 0.3;
+nutune = 1;
 
 % Output parameters
-steps_per_save = 25;
+steps_per_save = 5;
 packet_delay = packet_delay_days / f;
 packet_steps_per_save = 5;
 pv_filename = 'data/pv';
@@ -52,8 +52,8 @@ log_message = create_logger(LOG_VERBOSE);
 % Set up initial conditions
 t = 0;
 
-q1 = 0.1*initial_q(X, Y, U_g, K_d2);
-q2 = 0.1*initial_q(X, Y, U_g, K_d2);
+q1 = initial_q(X, Y, U_g, K_d2);
+q2 = initial_q(X, Y, U_g, K_d2);
 q = cat(3, q1, q2);
 qk = apply_3d(q, @g2k);
 
@@ -197,15 +197,20 @@ for step=1:Nsteps
        subplot 211
        contourf(X, Y, q(:,:,1), 18, 'LineColor','none');
        axis image
-       colorbar()
+       title("Top layer PV");
+       c = colorbar();
+       ylabel(c, "PV");
        caxis([-c_max(1), c_max(1)]);
        subplot 212
        contourf(X, Y, q(:,:,2), 18, 'LineColor','none');
-       axis image
-       colorbar()
+       axis image 
+       title("Bottom layer PV");
+       c = colorbar();
+       ylabel(c, "PV");
        caxis([-c_max(2), c_max(2)]);
        colormap(redblue);
-       pause(1/30);
+       exportgraphics(gcf,'two_layer_flow.gif','Append',true);
+       %pause(1/30);
        %q_save(:,:,frame) = q;
        %t_background_save(frame) = t;
        %write_field(q, pv_filename, frame);
