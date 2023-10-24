@@ -10,7 +10,7 @@ function qg2layersw_raytrace(nx, Npackets, near_inertial_factor, T_Fr_days, pack
 % Cg: Group velocity of the waves (equal to sqrt(gH))
 
 % Set up domain
-L = 8*pi;
+L = 20;
 dx = L/nx;
 x = linspace(-L/2, L/2, nx);
 [X, Y] = ndgrid(x, x);
@@ -25,18 +25,19 @@ K2 = kx_.^2 + ky_.^2;
 rng(5);
 beta = 0;
 K_d2 = f/Cg;
-shear_strength = 1;
+shear_strength = 0.5;
 T_Fr = T_Fr_days/f;
 packet_delay_Fr = packet_delay_Fr_days/f;
 CFL_fraction = 0.25;
 alpha = 4;
-r = 1;
-nutune = 10;
+r = 0.4;
+nutune = 0.1;
 
 % Output parameters
-steps_per_save = 5;
+steps_per_save = 10;
 packet_delay_steps = packet_delay_Fr / f;
-packet_steps_per_save = 5;
+
+packet_steps_per_save = 25;
 pv_filename = 'data/pv';
 pv_time_filename = 'data/pv_time';
 packet_x_filename = 'data/packet_x';
@@ -54,7 +55,7 @@ log_message = create_logger(LOG_VERBOSE);
 t = 0;
 
 q1 = initial_q(X, Y, U_g, K_d2);
-q2 = q1;
+q2 = -q1;
 q = cat(3, q1, q2);
 qk = apply_3d(q, @g2k);
 
@@ -75,7 +76,7 @@ Fr = mean(U0)/Cg;
 T = T_Fr / Fr^2;
 
 dt = CFL_fraction*dx/U0;
-nu = nutune*dx/(dt*kmax^(2*alpha));
+nu = nutune*(dx)^(2*alpha);
 
 Nsteps = ceil(T/dt);
 packet_step_start = ceil(packet_delay_steps / dt);
@@ -145,7 +146,7 @@ factor_L = mean_flow_terms + diffusion_terms;
 [LV,LD] = pageeig(factor_L);
 LV1 = pageinv(LV);
 expLdt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
-expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, 2*dt)), LV1);
 
 step = 0;
 while t <= T 
@@ -155,21 +156,12 @@ while t <= T
    flow = grid_U(qk, K_d2, K2, kx_, ky_, shear_strength);
    speed2 = (flow.u.^2 + flow.v.^2);
    U0 = sqrt(max(speed2(:)));
-   CFL_condition = 0.5*dx / max(U0);
+   CFL_condition = CFL_fraction*dx / max(U0);
    if CFL_condition < dt || dt < CFL_condition/4
-        dt = CFL_fraction * dx / max(U0);
-        nu = nutune*dx/(dt*kmax^(2*alpha));
-        diffusion_factor(1,1,:,:) = ((nu * K2.^(alpha) + r).*K2 - 1i*kx_*beta);
-        diffusion_terms = B.*diffusion_factor;
-        shear_factor(1,1,:,:) = 1i*kx_*shear_strength;
-        mean_flow_terms = shear_factor.*pagemtimes([-1,0;0,1], (eye(2) + 2*F*B));
-        factor_L = mean_flow_terms + diffusion_terms;
-
-        [LV,LD] = pageeig(factor_L);
-        LV1 = pageinv(LV);
+        dt = CFL_fraction/2 * dx / max(U0);
         log_message("CFL condition not met, max|u|=%f, new dt=%f\n", LOG_VERBOSE, U0, dt);
         expLdt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
-        expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, dt)), LV1);
+        expL2dt = pagemtimes(pagemtimes(LV, diag_exp(LD, 2*dt)), LV1);
    end
 
    prev_qk = qk;
@@ -216,24 +208,34 @@ while t <= T
       write_field(t, packet_time_filename, packet_frame);
    end
    
-   if(mod(step, steps_per_save) == 0)
+   if(mod(step, steps_per_save) == 1)
        frame = frame + 1;
        c_max = max(abs(q), [], [1,2]);
        q = apply_3d(qk, @k2g);
-       % subplot 211
-       contourf(X, Y, q(:,:,1), 18, 'LineColor','none');
+       subplot 211
+       p = pcolor(X, Y, q(:,:,1));
+       p.FaceColor = 'interp';
+       set(p, 'EdgeColor', 'none');
        axis image
-       colorbar()
+       title("Top layer PV");
+       c = colorbar();
+       ylabel(c, "PV");
        clim([-c_max(1), c_max(1)]);
-       % subplot 212
-       % contourf(X, Y, q(:,:,2), 18, 'LineColor','none');
-       % axis image
-       % colorbar()
-       % caxis([-c_max(2), c_max(2)]);
+       subplot 212
+       p = pcolor(X, Y, q(:,:,2));
+       p.FaceColor = 'interp';
+       set(p, 'EdgeColor', 'none');
+       axis image 
+       title("Bottom layer PV");
+       c = colorbar();
+       ylabel(c, "PV");
+       clim([-c_max(2), c_max(2)]);
        colormap(redblue);
-       pause(1/60);
-       write_field(q, pv_filename, frame);
-       write_field(t, pv_time_filename, frame);
+       pause(1/30);
+       %q_save(:,:,frame) = q;
+       %t_background_save(frame) = t;
+       %write_field(q, pv_filename, frame);
+       %write_field(t, pv_time_filename, frame);
    end
    if mod(step, 51) == 0
         log_message("% 6.2f%%\n", LOG_VERBOSE, step/Nsteps*100)
